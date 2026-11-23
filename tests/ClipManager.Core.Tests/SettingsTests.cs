@@ -9,7 +9,7 @@ public class SettingsTests
     {
         var s = new AppSettings();
         Assert.Equal(DiscordTier.Free, s.Tier);
-        Assert.Equal(10, s.LimitFor(DiscordTier.Free));
+        Assert.Equal(20, s.LimitFor(DiscordTier.Free));
         Assert.Equal(50, s.LimitFor(DiscordTier.NitroBasic));
         Assert.Equal(500, s.LimitFor(DiscordTier.Nitro));
     }
@@ -20,8 +20,35 @@ public class SettingsTests
         var s = new AppSettings();
         s.TierLimitsMb[DiscordTier.Free] = 0;
         s.TierLimitsMb.Remove(DiscordTier.Nitro);
-        Assert.Equal(10, s.LimitFor(DiscordTier.Free));
+        Assert.Equal(20, s.LimitFor(DiscordTier.Free));
         Assert.Equal(500, s.LimitFor(DiscordTier.Nitro));
+    }
+
+    [Fact]
+    public void Load_OldDefaultTenMb_BecomesTwenty()
+    {
+        using var dir = new TempDir();
+        var path = System.IO.Path.Combine(dir.Path, "settings.json");
+        File.WriteAllText(path, """{ "Tier": "Free", "TierLimitsMb": { "Free": 10, "NitroBasic": 50, "Nitro": 500 } }""");
+        var s = new SettingsStore(path).Load();
+        Assert.Equal(20, s.LimitFor(DiscordTier.Free));
+        Assert.Equal(AppSettings.CurrentVersion, s.Version);
+    }
+
+    [Fact]
+    public void Load_CustomLimit_IsKept()
+    {
+        using var dir = new TempDir();
+        var path = System.IO.Path.Combine(dir.Path, "settings.json");
+        File.WriteAllText(path, """{ "TierLimitsMb": { "Free": 8 } }""");
+        Assert.Equal(8, new SettingsStore(path).Load().LimitFor(DiscordTier.Free));
+
+        // Nach der Umstellung bleibt auch ein bewusst gesetztes 10 MB erhalten.
+        var store = new SettingsStore(path);
+        var s = new AppSettings();
+        s.TierLimitsMb[DiscordTier.Free] = 10;
+        store.Save(s);
+        Assert.Equal(10, store.Load().LimitFor(DiscordTier.Free));
     }
 
     [Fact]

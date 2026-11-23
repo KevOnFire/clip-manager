@@ -15,12 +15,17 @@ public sealed class AppSettings
     /// <summary>Upload-Limits in MB pro Stufe. Änderbar, falls Discord die Werte anpasst.</summary>
     public Dictionary<DiscordTier, int> TierLimitsMb { get; set; } = DefaultLimits();
 
+    /// <summary>Stand der Einstellungsdatei, für Umstellungen alter Werte (siehe SettingsStore.Migrate).</summary>
+    public int Version { get; set; } = CurrentVersion;
+
+    public const int CurrentVersion = 1;
+
     /// <summary>Eigener Pfad zu ffmpeg.exe. Leer = automatisch suchen.</summary>
     public string? FfmpegPath { get; set; }
 
     public static Dictionary<DiscordTier, int> DefaultLimits() => new()
     {
-        [DiscordTier.Free] = 10,
+        [DiscordTier.Free] = 20,
         [DiscordTier.NitroBasic] = 50,
         [DiscordTier.Nitro] = 500,
     };
