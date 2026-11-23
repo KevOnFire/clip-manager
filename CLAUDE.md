@@ -53,11 +53,13 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   MainWindow              Seitenleiste (Bibliothek, Einstellungen, Update-Knopf)
   Views/LibraryView       Kacheln, Seiten, Filter, Menü, Ordner-Überwachung, Klick öffnet Editor
   Editor/EditorWindow     Editor-Fenster: Player, Tastenkürzel, speichert Schnitte automatisch in der DB
-  Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf)
+  Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf, Spur-Zeilen).
+                          Bedienung: in Spur ziehen = Auswahl → Menü (stumm / rausschneiden), Ränder von stummen und
+                          rausgeschnittenen Stellen ziehbar, Klick auf so eine Stelle = Menü (wieder laut / reinnehmen)
   Editor/ExportWindow     Export-/Speichern-Dialog: Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Original ersetzen / Kopie / Speichern unter
   Editor/TrackPlayer      NAudio: Spuren gemischt abspielen (an/aus, Lautstärke, stumme Stellen)
   Editor/TrackRowViewModel  Spur-Kopf (Name, Haken, Lautstärke); Namen global in settings.json (TrackNames)
-  Views/SettingsView      Ordner, Discord, Export-Ordner, Updates, FFmpeg/GPU
+  Views/SettingsView      Ordner, Discord, Tonspur-Namen (+/–), Export-Ordner, Updates, FFmpeg/GPU
   AppUpdater, ShellFiles, Dialogs, FolderPicker
 tests/ClipManager.Core.Tests/   xUnit-Tests für Core
 .github/workflows/build.yml     Windows-Build, Tests, FFmpeg dazu, Artifact, Release auf main
@@ -111,7 +113,7 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | – | Update-Knopf, Releases, diese Übergabe-Datei | fertig (in PR #2) |
 | 3 | Editor Teil 1: Player, Zeitleiste mit Vorschaubildern, Anfang/Ende kürzen, Stellen in der Mitte rausschneiden, Tastenkürzel | fertig (PR #4, Fixes in PR #5) |
 | 4 | Export: Discord-Stufen, Bitrate-Rechnung, GPU-Encoder, Fortschritt, fertigen Clip per Drag-and-Drop aus dem Programm ziehen, "Speichern unter" | fertig (PR #6, #7) |
-| 5 | Editor Teil 2: Audiospuren einzeln (Lautstärke, stumm, stumme Bereiche), Vorschau hört genau, was exportiert wird; Speichern (ersetzen/Kopie) | in PR #8 (Klicktest offen) |
+| 5 | Editor Teil 2: Audiospuren einzeln (Lautstärke, stumm, stumme Bereiche), Vorschau hört genau, was exportiert wird; Speichern (ersetzen/Kopie) | fertig (PR #8); Schneiden per Ziehen + Spur-Namen in den Einstellungen in PR #9 |
 | 6 | Feinschliff: Hover-Vorschau auf Kacheln, Design, Fehlerfälle | offen |
 | 7 | Für andere: Installer, Ersteinrichtung, ggf. Code-Signatur | offen |
 

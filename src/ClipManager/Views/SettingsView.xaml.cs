@@ -34,6 +34,7 @@ public partial class SettingsView : UserControl
             BasicLimitBox.Text = s.LimitFor(DiscordTier.NitroBasic).ToString();
             NitroLimitBox.Text = s.LimitFor(DiscordTier.Nitro).ToString();
             FillTierCombo();
+            FillTrackNames();
 
             ExportFolderText.Text = App.ExportFolder;
             ResetExportFolderButton.IsEnabled = !string.IsNullOrWhiteSpace(s.ExportFolder);
@@ -225,4 +226,77 @@ public partial class SettingsView : UserControl
     }
 
     private sealed record TierItem(DiscordTier Tier, string Label);
+
+    // ---------- Tonspur-Namen ----------
+
+    private List<TrackNameRow> _trackNames = new();
+
+    private void FillTrackNames()
+    {
+        var names = App.Settings.TrackNames;
+        var count = Math.Max(names.Count == 0 ? 0 : names.Keys.Max() + 1, 1);
+        _trackNames = Enumerable.Range(0, count)
+            .Select(i => new TrackNameRow(i, names.TryGetValue(i, out var n) ? n : string.Empty))
+            .ToList();
+        ShowTrackNames();
+    }
+
+    private void ShowTrackNames()
+    {
+        for (var i = 0; i < _trackNames.Count; i++)
+        {
+            _trackNames[i].IsLast = i == _trackNames.Count - 1 && _trackNames.Count > 1;
+        }
+
+        TrackNameList.ItemsSource = null;
+        TrackNameList.ItemsSource = _trackNames;
+    }
+
+    private void SaveTrackNames()
+    {
+        App.Settings.TrackNames = _trackNames
+            .Where(r => !string.IsNullOrWhiteSpace(r.Name))
+            .ToDictionary(r => r.Index, r => r.Name.Trim());
+        App.SaveSettings();
+    }
+
+    private void AddTrackName_Click(object sender, RoutedEventArgs e)
+    {
+        _trackNames.Add(new TrackNameRow(_trackNames.Count, string.Empty));
+        ShowTrackNames();
+    }
+
+    private void RemoveTrackName_Click(object sender, RoutedEventArgs e)
+    {
+        if (_trackNames.Count > 1)
+        {
+            _trackNames.RemoveAt(_trackNames.Count - 1);
+            ShowTrackNames();
+            SaveTrackNames();
+        }
+    }
+
+    private void TrackName_LostFocus(object sender, RoutedEventArgs e) => SaveTrackNames();
+
+    /// <summary>Eine Zeile in der Liste der Spur-Namen.</summary>
+    public sealed class TrackNameRow
+    {
+        public TrackNameRow(int index, string name)
+        {
+            Index = index;
+            Name = name;
+        }
+
+        public int Index { get; }
+
+        public string Name { get; set; }
+
+        public bool IsLast { get; set; }
+
+        public string Label => $"Spur {Index + 1}";
+
+        public string Placeholder => Index == 0 ? "z.B. Alles" : $"Spur {Index + 1}";
+
+        public Visibility RemoveVisibility => IsLast ? Visibility.Visible : Visibility.Collapsed;
+    }
 }

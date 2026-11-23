@@ -28,6 +28,10 @@ public sealed class TimelineControl : FrameworkElement
     private static readonly Pen LaneMutedPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xE8, 0x40, 0x4C)), 1.5));
     private const double HandleWidth = 10;
     private const double GrabDistance = 9;
+    private const double EdgeGrab = 6;
+
+    private static readonly Brush SelectionBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0xC8, 0x3D)));
+    private static readonly Pen SelectionPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xC8, 0x3D)), 1.5));
 
     /// <summary>Rand links/rechts, damit die Griffe außerhalb des Filmstreifens Platz haben.</summary>
     private const double Pad = HandleWidth;
@@ -50,6 +54,14 @@ public sealed class TimelineControl : FrameworkElement
     private TimeSpan _position;
     private DragMode _drag;
     private TimeSpan _dragValue;
+    private double _downX;
+    private bool _moved;
+    private int _dragTrack;
+    private int _dragRange;
+    private bool _dragStart;
+    private int _selTrack = -1;
+    private TimeSpan _selStart;
+    private TimeSpan _selEnd;
     private IReadOnlyList<float[]?>? _peaks;
     private readonly Dictionary<int, (double Width, Geometry Geometry)> _waveCache = new();
 
@@ -66,6 +78,9 @@ public sealed class TimelineControl : FrameworkElement
         Playhead,
         In,
         Out,
+        LaneSelect,
+        SplitEdge,
+        MutedEdge,
     }
 
     /// <summary>Der Nutzer hat auf der Zeitleiste geklickt oder gezogen.</summary>
@@ -95,8 +110,14 @@ public sealed class TimelineControl : FrameworkElement
         }
     }
 
-    /// <summary>Klick in eine Spur-Zeile: Spur-Index und Zeitpunkt (zum Stummschalten des Teils).</summary>
-    public event EventHandler<(int Track, TimeSpan Time)>? TrackLaneClicked;
+    /// <summary>In einer Spur wurde ein Bereich aufgezogen (Spur, Anfang, Ende).</summary>
+    public event EventHandler<(int Track, TimeSpan Start, TimeSpan End)>? RangeSelected;
+
+    /// <summary>Klick auf einen stummen Bereich einer Spur.</summary>
+    public event EventHandler<(int Track, TimeSpan Time)>? MutedClicked;
+
+    /// <summary>Klick auf einen rausgeschnittenen Teil.</summary>
+    public event EventHandler<TimeSpan>? RemovedClicked;
 
     /// <summary>Lautstärke-Spitzen pro Spur (0..1) für die Wellenform.</summary>
     public IReadOnlyList<float[]?>? Peaks
@@ -201,6 +222,15 @@ public sealed class TimelineControl : FrameworkElement
         DrawHandle(dc, outX, isIn: false);
         DrawRuler(dc, tl.Duration, width);
         DrawLanes(dc, tl, strip, inX, outX);
+        if (_selTrack >= 0 && _selTrack < tl.Tracks.Count)
+        {
+            var a = X(Min(_selStart, _selEnd));
+            var b = X(Max(_selStart, _selEnd));
+            var sel = new Rect(a, LanesTop + _selTrack * LaneHeight, Math.Max(1, b - a), LaneHeight - 4);
+            dc.DrawRectangle(SelectionBrush, SelectionPen, sel);
+            // Oben im Filmstreifen andeuten, was das im Bild wäre
+            dc.DrawRectangle(SelectionBrush, null, new Rect(a, StripTop, Math.Max(1, b - a), StripHeight));
+        }
 
         // Abspielkopf: nur innerhalb des Filmstreifens, nicht darüber
         var px = X(_position);
@@ -238,24 +268,56 @@ public sealed class TimelineControl : FrameworkElement
 
         var point = e.GetPosition(this);
         var x = point.X;
-        if (LaneAt(point.Y) is { } lane)
+        _downX = x;
+        _moved = false;
+        ClearSelection();
+
+        var lane = LaneAt(point.Y);
+        if (lane is { } track && MutedEdgeAt(track, x) is { } edge)
         {
-            TrackLaneClicked?.Invoke(this, (lane, TimeAt(x)));
+            // Rand eines stummen Bereichs ziehen
+            _drag = DragMode.MutedEdge;
+            _dragTrack = track;
+            _dragRange = edge.Range;
+            _dragStart = edge.Start;
+            _timeline.BeginChange();
+        }
+        else if (RemovedEdgeAt(x) is { } split)
+        {
+            // Rand eines rausgeschnittenen Teils ziehen (in Spur oder oben)
+            _drag = DragMode.SplitEdge;
+            _dragValue = split;
+            _timeline.BeginChange();
+        }
+        else if (lane is { } selectTrack)
+        {
+            // In einer Spur ziehen = Bereich auswählen
+            _drag = DragMode.LaneSelect;
+            _selTrack = selectTrack;
+            _selStart = _selEnd = TimeAt(x);
+            CaptureMouse();
             e.Handled = true;
             return;
         }
+        else
+        {
+            _drag = HitTest(x);
+            _dragValue = TimeAt(x);
+            if (_drag == DragMode.In)
+            {
+                _dragValue = _timeline.In;
+            }
+            else if (_drag == DragMode.Out)
+            {
+                _dragValue = _timeline.Out;
+            }
+        }
 
-        _drag = HitTest(x);
-        _dragValue = TimeAt(x);
         CaptureMouse();
         ScrubbingChanged?.Invoke(this, true);
         if (_drag == DragMode.Playhead)
         {
             SeekRequested?.Invoke(this, _dragValue);
-        }
-        else
-        {
-            _dragValue = _drag == DragMode.In ? _timeline.In : _timeline.Out;
         }
 
         e.Handled = true;
@@ -269,18 +331,58 @@ public sealed class TimelineControl : FrameworkElement
             return;
         }
 
-        var x = e.GetPosition(this).X;
+        var point = e.GetPosition(this);
+        var x = point.X;
         if (_drag == DragMode.None)
         {
-            Cursor = LaneAt(e.GetPosition(this).Y) != null || HitTest(x) == DragMode.Playhead ? Cursors.Hand : Cursors.SizeWE;
+            Cursor = HoverCursor(point);
             return;
         }
 
-        var t = TimeAt(x);
-        if (_drag == DragMode.Playhead)
+        if (Math.Abs(x - _downX) >= 3)
         {
-            SeekRequested?.Invoke(this, t);
-            return;
+            _moved = true;
+        }
+
+        var t = TimeAt(x);
+        switch (_drag)
+        {
+            case DragMode.Playhead:
+                SeekRequested?.Invoke(this, t);
+                return;
+
+            case DragMode.LaneSelect:
+                _selEnd = t;
+                InvalidateVisual();
+                return;
+
+            case DragMode.SplitEdge:
+                if (_timeline.MoveSplit(_dragValue, t, recordUndo: false) is { } moved)
+                {
+                    _dragValue = moved;
+                    SeekRequested?.Invoke(this, moved);
+                }
+
+                return;
+
+            case DragMode.MutedEdge:
+                if (_timeline.MoveMutedEdge(_dragTrack, _dragRange, _dragStart, t, recordUndo: false) is { } edge)
+                {
+                    // Nach dem Zusammenlegen kann sich die Nummer des Bereichs ändern.
+                    var muted = _timeline.Tracks[_dragTrack].Muted;
+                    for (var i = 0; i < muted.Count; i++)
+                    {
+                        if ((_dragStart ? muted[i].Start : muted[i].End) == edge)
+                        {
+                            _dragRange = i;
+                            break;
+                        }
+                    }
+
+                    SeekRequested?.Invoke(this, edge);
+                }
+
+                return;
         }
 
         // Anfang/Ende beim Ziehen nur in der Vorschau verschieben, übernommen wird beim Loslassen
@@ -295,17 +397,27 @@ public sealed class TimelineControl : FrameworkElement
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonUp(e);
-        FinishDrag();
+        FinishDrag(e.GetPosition(this));
         e.Handled = true;
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
-        FinishDrag();
+        FinishDrag(null);
     }
 
-    private void FinishDrag()
+    /// <summary>Entfernt die markierte Auswahl (nachdem das Menü dazu zu ist).</summary>
+    public void ClearSelection()
+    {
+        if (_selTrack >= 0)
+        {
+            _selTrack = -1;
+            InvalidateVisual();
+        }
+    }
+
+    private void FinishDrag(Point? up)
     {
         var mode = _drag;
         if (mode == DragMode.None)
@@ -319,17 +431,137 @@ public sealed class TimelineControl : FrameworkElement
             ReleaseMouseCapture();
         }
 
-        if (mode == DragMode.In)
+        var t = up is { } p ? TimeAt(p.X) : _selEnd;
+        switch (mode)
         {
-            _timeline?.SetIn(_dragValue);
-        }
-        else if (mode == DragMode.Out)
-        {
-            _timeline?.SetOut(_dragValue);
+            case DragMode.In:
+                _timeline?.SetIn(_dragValue);
+                break;
+            case DragMode.Out:
+                _timeline?.SetOut(_dragValue);
+                break;
+            case DragMode.SplitEdge:
+            case DragMode.MutedEdge:
+                if (!_moved)
+                {
+                    // Nur geklickt, nichts verschoben: den leeren Rückgängig-Schritt wieder weg.
+                    _timeline?.Undo();
+                    if (mode == DragMode.MutedEdge)
+                    {
+                        MutedClicked?.Invoke(this, (_dragTrack, t));
+                    }
+                    else if (_timeline?.SegmentAt(t) is { Removed: true })
+                    {
+                        RemovedClicked?.Invoke(this, t);
+                    }
+                }
+
+                break;
+            case DragMode.Playhead:
+                if (!_moved && up != null && _timeline?.SegmentAt(t) is { Removed: true })
+                {
+                    RemovedClicked?.Invoke(this, t);
+                }
+
+                break;
+            case DragMode.LaneSelect:
+                var track = _selTrack;
+                if (_moved && up != null && (_selEnd - _selStart).Duration() >= EditTimeline.MinSegment)
+                {
+                    InvalidateVisual();
+                    RangeSelected?.Invoke(this, (track, Min(_selStart, _selEnd), Max(_selStart, _selEnd)));
+                    return; // Auswahl bleibt sichtbar, bis das Menü zu ist.
+                }
+
+                ClearSelection();
+                if (up == null)
+                {
+                    return;
+                }
+
+                // Nur geklickt: auf stummem Bereich → Menü, auf entferntem Teil → Menü, sonst springen.
+                if (_timeline?.MutedRangeIndexAt(track, t) >= 0)
+                {
+                    MutedClicked?.Invoke(this, (track, t));
+                }
+                else if (_timeline?.SegmentAt(t) is { Removed: true })
+                {
+                    RemovedClicked?.Invoke(this, t);
+                }
+                else
+                {
+                    SeekRequested?.Invoke(this, t);
+                }
+
+                return;
         }
 
-        ScrubbingChanged?.Invoke(this, false);
+        if (mode != DragMode.LaneSelect)
+        {
+            ScrubbingChanged?.Invoke(this, false);
+        }
+
         InvalidateVisual();
+    }
+
+    private Cursor HoverCursor(Point point)
+    {
+        var lane = LaneAt(point.Y);
+        if ((lane is { } track && MutedEdgeAt(track, point.X) != null) || RemovedEdgeAt(point.X) != null)
+        {
+            return Cursors.SizeWE;
+        }
+
+        if (lane != null)
+        {
+            return Cursors.IBeam;
+        }
+
+        return HitTest(point.X) == DragMode.Playhead ? Cursors.Hand : Cursors.SizeWE;
+    }
+
+    /// <summary>Rand eines stummen Bereichs in einer Spur unter x (Bereich-Nummer, Anfang/Ende).</summary>
+    private (int Range, bool Start)? MutedEdgeAt(int track, double x)
+    {
+        if (_timeline is not { } tl || track >= tl.Tracks.Count || !tl.Tracks[track].Enabled)
+        {
+            return null;
+        }
+
+        var muted = tl.Tracks[track].Muted;
+        for (var i = 0; i < muted.Count; i++)
+        {
+            if (Math.Abs(x - X(muted[i].Start)) <= EdgeGrab)
+            {
+                return (i, true);
+            }
+
+            if (Math.Abs(x - X(muted[i].End)) <= EdgeGrab)
+            {
+                return (i, false);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Schnittpunkt am Rand eines rausgeschnittenen Teils unter x.</summary>
+    private TimeSpan? RemovedEdgeAt(double x)
+    {
+        if (_timeline is not { } tl)
+        {
+            return null;
+        }
+
+        foreach (var edge in tl.RemovedEdges)
+        {
+            if (Math.Abs(x - X(edge)) <= EdgeGrab)
+            {
+                return edge;
+            }
+        }
+
+        return null;
     }
 
     private DragMode HitTest(double x)

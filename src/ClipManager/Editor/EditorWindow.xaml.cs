@@ -55,7 +55,9 @@ public partial class EditorWindow : FluentWindow
 
         TimelineView.SeekRequested += (_, t) => ScrubTo(t);
         TimelineView.ScrubbingChanged += Timeline_ScrubbingChanged;
-        TimelineView.TrackLaneClicked += (_, e) => _timeline?.ToggleTrackMuteAt(e.Track, e.Time);
+        TimelineView.RangeSelected += (_, e) => ShowRangeMenu(e.Track, e.Start, e.End);
+        TimelineView.MutedClicked += (_, e) => ShowMenu(("Wieder laut machen", () => _timeline?.UnmuteTrackAt(e.Track, e.Time)));
+        TimelineView.RemovedClicked += (_, t) => ShowMenu(("Wieder reinnehmen", () => _timeline?.RestoreAt(t)));
 
         Player.Volume = VolumeSlider.Value;
 
@@ -165,7 +167,7 @@ public partial class EditorWindow : FluentWindow
         {
             0 => "Dieser Clip hat keinen Ton.",
             1 => "Tonspur",
-            _ => "Tonspuren · Haken = im Export · Klick in eine Spur macht den Teil stumm",
+            _ => "Tonspuren · Haken = im Export · In einer Spur ziehen zum Stummschalten oder Rausschneiden",
         };
     }
 
@@ -581,6 +583,39 @@ public partial class EditorWindow : FluentWindow
     private void Reset_Click(object sender, RoutedEventArgs e) => _timeline?.Reset();
 
     private void Export_Click(object sender, RoutedEventArgs e) => OpenExport(saveMode: false);
+
+    /// <summary>Menü nach dem Aufziehen eines Bereichs in einer Spur.</summary>
+    private void ShowRangeMenu(int track, TimeSpan start, TimeSpan end)
+    {
+        var name = track < _trackRows.Count ? _trackRows[track].Name : $"Spur {track + 1}";
+        var length = TimeText.Format(end - start);
+        ShowMenu(
+            ($"Nur in \"{name}\" stumm schalten ({length})", () => _timeline?.MuteTrackRange(track, start, end)),
+            ($"Aus dem ganzen Clip rausschneiden ({length})", () => _timeline?.RemoveRange(start, end)),
+            ("Ab hier abspielen", () =>
+            {
+                Seek(start);
+                SetPlaying(true);
+            }));
+    }
+
+    private void ShowMenu(params (string Text, Action Action)[] items)
+    {
+        var menu = new System.Windows.Controls.ContextMenu
+        {
+            PlacementTarget = TimelineView,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint,
+        };
+        foreach (var (text, action) in items)
+        {
+            var item = new System.Windows.Controls.MenuItem { Header = text };
+            item.Click += (_, _) => action();
+            menu.Items.Add(item);
+        }
+
+        menu.Closed += (_, _) => TimelineView.ClearSelection();
+        menu.IsOpen = true;
+    }
 
     private void TrackVolume_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) =>
         _timeline?.BeginTrackVolumeChange();
