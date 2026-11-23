@@ -114,8 +114,10 @@ public partial class EditorWindow : FluentWindow
         _timeline.Changed += Timeline_Changed;
         TimelineView.Timeline = _timeline;
         UpdateTexts();
+        // Direkt ab dem Anfang des Schnitts abspielen.
         Seek(_timeline.In);
         _timer.Start();
+        SetPlaying(true);
         _ = LoadFilmstripAsync(duration);
     }
 
