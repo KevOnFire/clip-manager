@@ -154,6 +154,12 @@ public partial class SettingsView : UserControl
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
     }
 
+    private void OpenLog_Click(object sender, RoutedEventArgs e)
+    {
+        Directory.CreateDirectory(App.LogFolder);
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{App.LogFolder}\"") { UseShellExecute = true });
+    }
+
     private async void CheckFfmpeg_Click(object sender, RoutedEventArgs e) => await CheckFfmpegAsync();
 
     private async Task CheckFfmpegAsync()
@@ -171,7 +177,9 @@ public partial class SettingsView : UserControl
 
             FfmpegStatusText.Text = status.Found
                 ? $"✓ Gefunden, Version {status.Version}"
-                : $"✗ {status.Error} Lege ffmpeg.exe in den Ordner \"ffmpeg\" neben dem Programm.";
+                : App.RunsFromTempFolder
+                    ? "✗ Das Programm wurde direkt aus der ZIP-Datei gestartet. Bitte die ZIP erst komplett entpacken (Rechtsklick → Alle extrahieren) und dann die ClipManager.exe im entpackten Ordner starten."
+                    : $"✗ {status.Error} Im Ordner \"{App.AppDirectory}\" muss ein Unterordner \"ffmpeg\" mit ffmpeg.exe liegen.";
             FfmpegPathText.Text = status.Paths?.Ffmpeg ?? "–";
             NvidiaText.Text = Describe(status.Nvidia);
             AmdText.Text = Describe(status.Amd);

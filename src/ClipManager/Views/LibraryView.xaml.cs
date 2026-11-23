@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using ClipManager.Core;
 using ClipManager.Core.Library;
 using ClipManager.Core.Media;
 
@@ -180,6 +181,11 @@ public partial class LibraryView : UserControl
             text += $" · {missing} Ordner nicht gefunden";
         }
 
+        if (App.LocateFfmpeg() == null)
+        {
+            text += " · ⚠ FFmpeg fehlt, keine Vorschaubilder (siehe Einstellungen)";
+        }
+
         if (analyzed is { } done)
         {
             text += $" · analysiere {done} …";
@@ -216,19 +222,37 @@ public partial class LibraryView : UserControl
     private async Task LoadTilesAsync(IReadOnlyList<ClipTileViewModel> tiles, CancellationToken ct)
     {
         var ffmpeg = App.LocateFfmpeg();
+        if (ffmpeg == null)
+        {
+            Log.Error("Keine Vorschaubilder: FFmpeg nicht gefunden");
+        }
+
         await Task.WhenAll(tiles.Select(t => LoadTileAsync(t, ffmpeg, ct)));
     }
 
     private async Task LoadTileAsync(ClipTileViewModel tile, FfmpegPaths? ffmpeg, CancellationToken ct)
     {
+        // Infos und Vorschaubild getrennt: scheitert eins, soll das andere trotzdem kommen.
         try
         {
             tile.Info = await GetMediaInfoAsync(tile.Clip, ffmpeg, ct);
-            if (ffmpeg == null || ct.IsCancellationRequested)
-            {
-                return;
-            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Clip-Infos für \"{tile.Clip.Path}\" konnten nicht gelesen werden", ex);
+        }
 
+        if (ffmpeg == null || ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        try
+        {
             var thumb = await App.Thumbnails.GetOrCreateAsync(ffmpeg.Ffmpeg, tile.Clip, tile.Info?.Duration, ct);
             if (thumb != null && !ct.IsCancellationRequested)
             {
@@ -238,9 +262,9 @@ public partial class LibraryView : UserControl
         catch (OperationCanceledException)
         {
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        catch (Exception ex)
         {
-            // Eine kaputte oder gerade geschriebene Datei soll nicht die ganze Seite stören.
+            Log.Error($"Vorschaubild für \"{tile.Clip.Path}\" konnte nicht angezeigt werden", ex);
         }
     }
 
@@ -304,8 +328,9 @@ public partial class LibraryView : UserControl
         {
             return;
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception ex)
         {
+            Log.Error("Analyse der Clips abgebrochen", ex);
         }
 
         if (!cts.IsCancellationRequested)
