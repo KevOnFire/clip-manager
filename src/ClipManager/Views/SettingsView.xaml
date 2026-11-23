@@ -119,6 +119,45 @@
                 </StackPanel>
             </Border>
 
+            <!-- Tonspur-Namen -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CardTitle}" Text="Tonspur-Namen" />
+                    <TextBlock Style="{StaticResource Hint}" Text="So heißen die Spuren im Editor bei jedem Clip. Z.B. Spur 1 = Alles, Spur 2 = Spiel, Spur 3 = Mikro. Leer lassen = &quot;Spur N&quot;." />
+                    <ItemsControl x:Name="TrackNameList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,0,0,8">
+                                    <TextBlock
+                                        Width="70"
+                                        DockPanel.Dock="Left"
+                                        Style="{StaticResource Label}"
+                                        Text="{Binding Label}" />
+                                    <ui:Button
+                                        Margin="8,0,0,0"
+                                        Padding="8,6"
+                                        Appearance="Transparent"
+                                        Click="RemoveTrackName_Click"
+                                        DockPanel.Dock="Right"
+                                        Icon="{ui:SymbolIcon Dismiss24}"
+                                        ToolTip="Letzte Spur entfernen"
+                                        Visibility="{Binding RemoveVisibility}" />
+                                    <ui:TextBox
+                                        LostFocus="TrackName_LostFocus"
+                                        PlaceholderText="{Binding Placeholder}"
+                                        Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ui:Button
+                        HorizontalAlignment="Left"
+                        Click="AddTrackName_Click"
+                        Content="Spur hinzufügen"
+                        Icon="{ui:SymbolIcon Add24}" />
+                </StackPanel>
+            </Border>
+
             <!-- Export-Ordner -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>

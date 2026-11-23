@@ -136,4 +136,62 @@ public class TrackEditTests
         Assert.True(RangeSet.Covers(r, new TimeRange(S(5), S(6))));
         Assert.False(RangeSet.Covers(r, new TimeRange(S(1), S(5))));
     }
+
+    [Fact]
+    public void MuteTrackRange_ByDragging()
+    {
+        var t = Obs();
+        Assert.True(t.MuteTrackRange(3, S(20), S(12)));
+        Assert.Equal(new[] { new TimeRange(S(12), S(20)) }, t.Tracks[3].Muted);
+        Assert.False(t.MuteTrackRange(3, S(13), S(15))); // schon stumm
+        Assert.Equal(0, t.MutedRangeIndexAt(3, S(14)));
+        Assert.Equal(-1, t.MutedRangeIndexAt(3, S(25)));
+        Assert.True(t.UnmuteTrackAt(3, S(14)));
+        Assert.Empty(t.Tracks[3].Muted);
+    }
+
+    [Fact]
+    public void MoveMutedEdge_ResizesAndMerges()
+    {
+        var t = Obs();
+        t.MuteTrackRange(2, S(10), S(20));
+        t.MuteTrackRange(2, S(30), S(40));
+        t.BeginChange();
+        Assert.Equal(S(8), t.MoveMutedEdge(2, 0, start: true, S(8), recordUndo: false));
+        Assert.Equal(S(19.9), t.MoveMutedEdge(2, 0, start: true, S(25), recordUndo: false)); // nicht über das Ende hinaus
+        t.Undo();
+        Assert.Equal(S(10), t.Tracks[2].Muted[0].Start);
+
+        // Ende über den nächsten Bereich ziehen → zusammengelegt
+        t.MoveMutedEdge(2, 0, start: false, S(35));
+        Assert.Equal(new[] { new TimeRange(S(10), S(40)) }, t.Tracks[2].Muted);
+    }
+
+    [Fact]
+    public void MoveSplit_ResizesRemovedPart()
+    {
+        var t = Obs();
+        t.RemoveRange(S(20), S(30));
+        Assert.Equal(new[] { S(20), S(30) }, t.RemovedEdges);
+
+        Assert.Equal(S(25), t.MoveSplit(S(30), S(25)));
+        Assert.Equal(new[] { new TimeRange(S(0), S(20)), new TimeRange(S(25), S(60)) }, t.KeptRanges);
+
+        Assert.Equal(S(15), t.MoveSplit(S(20), S(15)));
+        Assert.Equal(new[] { new TimeRange(S(0), S(15)), new TimeRange(S(25), S(60)) }, t.KeptRanges);
+
+        // Nicht über den Nachbarn hinaus
+        Assert.Equal(S(24.9), t.MoveSplit(S(15), S(50)));
+        Assert.Null(t.MoveSplit(S(3), S(4)));
+    }
+
+    [Fact]
+    public void RestoreAt_BringsRemovedPartBack()
+    {
+        var t = Obs();
+        t.RemoveRange(S(20), S(30));
+        Assert.False(t.RestoreAt(S(10)));
+        Assert.True(t.RestoreAt(S(25)));
+        Assert.Equal(S(60), t.OutputDuration);
+    }
 }

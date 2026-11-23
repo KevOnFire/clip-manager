@@ -129,7 +129,138 @@ public sealed class EditTimeline
     }
 
     /// <summary>Merkt den jetzigen Stand für Rückgängig, bevor ein Regler gezogen wird.</summary>
-    public void BeginTrackVolumeChange() => _undo.Push(Snapshot());
+    public void BeginTrackVolumeChange() => BeginChange();
+
+    /// <summary>
+    /// Merkt den jetzigen Stand für Rückgängig, bevor etwas gezogen wird (Regler, Ränder).
+    /// Die Zwischenschritte danach mit recordUndo=false, dann ist das Ziehen ein einziger Rückgängig-Schritt.
+    /// </summary>
+    public void BeginChange() => _undo.Push(Snapshot());
+
+    /// <summary>Macht in einer Spur den Bereich a–b stumm (Reihenfolge egal).</summary>
+    public bool MuteTrackRange(int index, TimeSpan a, TimeSpan b)
+    {
+        var range = Ordered(a, b);
+        if (TrackAt(index) is not { } track || range.Duration < MinSegment || RangeSet.Covers(track.Muted, range))
+        {
+            return false;
+        }
+
+        Mutate(() => _tracks[index] = track with { Muted = RangeSet.Add(track.Muted, range) });
+        return true;
+    }
+
+    /// <summary>Index des stummen Bereichs einer Spur bei t, oder -1.</summary>
+    public int MutedRangeIndexAt(int index, TimeSpan t)
+    {
+        if (TrackAt(index) is not { } track)
+        {
+            return -1;
+        }
+
+        for (var i = 0; i < track.Muted.Count; i++)
+        {
+            if (track.Muted[i].Contains(t))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>Macht den stummen Bereich bei t wieder laut.</summary>
+    public bool UnmuteTrackAt(int index, TimeSpan t)
+    {
+        var i = MutedRangeIndexAt(index, t);
+        if (i < 0)
+        {
+            return false;
+        }
+
+        var track = _tracks[index];
+        Mutate(() => _tracks[index] = track with { Muted = track.Muted.Where((_, n) => n != i).ToList() });
+        return true;
+    }
+
+    /// <summary>
+    /// Verschiebt Anfang oder Ende eines stummen Bereichs (Rand ziehen). Gibt den neuen Wert zurück.
+    /// Überlappt er danach einen anderen, werden beide zusammengelegt.
+    /// </summary>
+    public TimeSpan? MoveMutedEdge(int index, int rangeIndex, bool start, TimeSpan to, bool recordUndo = true)
+    {
+        if (TrackAt(index) is not { } track || rangeIndex < 0 || rangeIndex >= track.Muted.Count)
+        {
+            return null;
+        }
+
+        to = Clamp(to);
+        var old = track.Muted[rangeIndex];
+        var range = start
+            ? old with { Start = to < old.End - MinSegment ? to : old.End - MinSegment }
+            : old with { End = to > old.Start + MinSegment ? to : old.Start + MinSegment };
+        var others = track.Muted.Where((_, n) => n != rangeIndex);
+        var muted = RangeSet.Add(others, range);
+        Apply(() => _tracks[index] = track with { Muted = muted }, recordUndo);
+        return start ? range.Start : range.End;
+    }
+
+    /// <summary>Holt den entfernten Teil bei t zurück.</summary>
+    public bool RestoreAt(TimeSpan t) => SegmentAt(t) is { Removed: true } && ToggleRemovedAt(t);
+
+    /// <summary>Schnittpunkte, die an einen entfernten Teil grenzen (deren Ränder man ziehen kann).</summary>
+    public IEnumerable<TimeSpan> RemovedEdges
+    {
+        get
+        {
+            var segments = Segments;
+            for (var i = 1; i < segments.Count; i++)
+            {
+                if (segments[i].Removed != segments[i - 1].Removed)
+                {
+                    yield return segments[i].Start;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verschiebt einen Schnittpunkt (z.B. den Rand eines entfernten Teils), höchstens bis kurz vor
+    /// die Nachbarn. Gibt die neue Position zurück oder null, wenn es den Punkt nicht gibt.
+    /// </summary>
+    public TimeSpan? MoveSplit(TimeSpan from, TimeSpan to, bool recordUndo = true)
+    {
+        var i = _splits.IndexOf(from);
+        if (i < 0)
+        {
+            return null;
+        }
+
+        var lower = (i > 0 ? _splits[i - 1] : TimeSpan.Zero) + MinSegment;
+        var upper = (i < _splits.Count - 1 ? _splits[i + 1] : Duration) - MinSegment;
+        if (upper < lower)
+        {
+            return from;
+        }
+
+        to = to < lower ? lower : to > upper ? upper : to;
+        if (to == from)
+        {
+            return from;
+        }
+
+        Apply(
+            () =>
+            {
+                _splits[i] = to;
+                if (_removed.Remove(from))
+                {
+                    _removed.Add(to);
+                }
+            },
+            recordUndo);
+        return to;
+    }
 
     /// <summary>
     /// Macht in einer Spur den Teil (zwischen zwei Schnitten) bei t stumm, oder wieder laut,
@@ -468,6 +599,22 @@ public sealed class EditTimeline
 
         public int GetHashCode(TrackEdit obj) => obj.Index;
     }
+
+    private void Apply(Action change, bool recordUndo)
+    {
+        if (recordUndo)
+        {
+            Mutate(change);
+        }
+        else
+        {
+            change();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private TimeRange Ordered(TimeSpan a, TimeSpan b) =>
+        a < b ? new TimeRange(Clamp(a), Clamp(b)) : new TimeRange(Clamp(b), Clamp(a));
 
     private void Mutate(Action change)
     {

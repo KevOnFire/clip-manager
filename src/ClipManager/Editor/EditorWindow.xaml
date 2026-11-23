@@ -242,7 +242,7 @@
                 VerticalAlignment="Center"
                 FontSize="12"
                 Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                Text="Leertaste: Abspielen · ← →: 1 s (mit Umschalt 5 s) · , .: einzelnes Bild · Pos1/Ende: zu Anfang/Ende · Klick in eine Spur: diesen Teil stumm (Teile entstehen durch S) · Schnitte werden automatisch gemerkt, das Original bleibt, bis du es beim Speichern ersetzt."
+                Text="Leertaste: Abspielen · ← →: 1 s (mit Umschalt 5 s) · , .: einzelnes Bild · Pos1/Ende: zu Anfang/Ende · In einer Spur ziehen: Stelle stumm schalten oder rausschneiden · Ränder von stummen/rausgeschnittenen Stellen lassen sich ziehen · Schnitte werden automatisch gemerkt, das Original bleibt, bis du es beim Speichern ersetzt."
                 TextWrapping="Wrap" />
         </DockPanel>
     </Grid>
