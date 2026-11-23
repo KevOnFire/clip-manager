@@ -19,6 +19,9 @@ public sealed class TimelineControl : FrameworkElement
     private const double HandleWidth = 10;
     private const double GrabDistance = 9;
 
+    /// <summary>Rand links/rechts, damit die Griffe außerhalb des Filmstreifens Platz haben.</summary>
+    private const double Pad = HandleWidth;
+
     private static readonly Brush Background = Frozen(new SolidColorBrush(Color.FromRgb(0x20, 0x20, 0x20)));
     private static readonly Brush OutsideBrush = Frozen(new SolidColorBrush(Color.FromArgb(0xC8, 0x10, 0x10, 0x10)));
     private static readonly Brush RemovedBrush = Frozen(new SolidColorBrush(Color.FromArgb(0xB0, 0x5A, 0x10, 0x14)));
@@ -105,7 +108,7 @@ public sealed class TimelineControl : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         var width = ActualWidth;
-        var strip = new Rect(0, StripTop, width, StripHeight);
+        var strip = new Rect(Pad, StripTop, Math.Max(0, width - 2 * Pad), StripHeight);
         dc.DrawRectangle(Background, null, new Rect(0, 0, width, ActualHeight));
         if (_timeline is not { } tl || tl.Duration <= TimeSpan.Zero || width <= 0)
         {
@@ -123,14 +126,14 @@ public sealed class TimelineControl : FrameworkElement
         var outX = X(outTime);
 
         // Weggeschnittener Anfang und Ende abdunkeln
-        if (inX > 0)
+        if (inX > strip.Left)
         {
-            dc.DrawRectangle(OutsideBrush, null, new Rect(0, StripTop, inX, StripHeight));
+            dc.DrawRectangle(OutsideBrush, null, new Rect(strip.Left, StripTop, inX - strip.Left, StripHeight));
         }
 
-        if (outX < width)
+        if (outX < strip.Right)
         {
-            dc.DrawRectangle(OutsideBrush, null, new Rect(outX, StripTop, width - outX, StripHeight));
+            dc.DrawRectangle(OutsideBrush, null, new Rect(outX, StripTop, strip.Right - outX, StripHeight));
         }
 
         // Entfernte Teile rot mit Kreuz
@@ -168,15 +171,15 @@ public sealed class TimelineControl : FrameworkElement
         DrawHandle(dc, outX, isIn: false);
         DrawRuler(dc, tl.Duration, width);
 
-        // Abspielkopf
+        // Abspielkopf: nur innerhalb des Filmstreifens, nicht darüber
         var px = X(_position);
-        dc.DrawLine(PlayheadPen, new Point(px, 0), new Point(px, StripTop + StripHeight + 4));
+        dc.DrawLine(PlayheadPen, new Point(px, StripTop), new Point(px, StripTop + StripHeight));
         var head = new StreamGeometry();
         using (var g = head.Open())
         {
-            g.BeginFigure(new Point(px - 6, 0), true, true);
-            g.LineTo(new Point(px + 6, 0), true, false);
-            g.LineTo(new Point(px, 8), true, false);
+            g.BeginFigure(new Point(px - 6, StripTop), true, true);
+            g.LineTo(new Point(px + 6, StripTop), true, false);
+            g.LineTo(new Point(px, StripTop + 8), true, false);
         }
 
         head.Freeze();
@@ -201,9 +204,9 @@ public sealed class TimelineControl : FrameworkElement
         _drag = HitTest(x);
         _dragValue = TimeAt(x);
         CaptureMouse();
+        ScrubbingChanged?.Invoke(this, true);
         if (_drag == DragMode.Playhead)
         {
-            ScrubbingChanged?.Invoke(this, true);
             SeekRequested?.Invoke(this, _dragValue);
         }
         else
@@ -280,11 +283,8 @@ public sealed class TimelineControl : FrameworkElement
         {
             _timeline?.SetOut(_dragValue);
         }
-        else
-        {
-            ScrubbingChanged?.Invoke(this, false);
-        }
 
+        ScrubbingChanged?.Invoke(this, false);
         InvalidateVisual();
     }
 
@@ -295,8 +295,8 @@ public sealed class TimelineControl : FrameworkElement
             return DragMode.None;
         }
 
-        var inDist = Math.Abs(x - X(_timeline.In));
-        var outDist = Math.Abs(x - X(_timeline.Out));
+        var inDist = Math.Abs(x - (X(_timeline.In) - HandleWidth / 2));
+        var outDist = Math.Abs(x - (X(_timeline.Out) + HandleWidth / 2));
         if (Math.Min(inDist, outDist) > GrabDistance)
         {
             return DragMode.Playhead;
@@ -307,8 +307,9 @@ public sealed class TimelineControl : FrameworkElement
 
     private void DrawHandle(DrawingContext dc, double x, bool isIn)
     {
-        var left = isIn ? x : x - HandleWidth;
-        left = Math.Clamp(left, 0, Math.Max(0, ActualWidth - HandleWidth));
+        // Griffe liegen außen am behaltenen Bereich, damit der Abspielkopf am Anfang
+        // innerhalb des gelben Rahmens steht und nicht unter dem Griff.
+        var left = isIn ? x - HandleWidth : x;
         dc.DrawRoundedRectangle(AccentBrush, null, new Rect(left, StripTop, HandleWidth, StripHeight), 3, 3);
         var mid = left + HandleWidth / 2;
         var grip = new Pen(new SolidColorBrush(Color.FromRgb(0x40, 0x30, 0x00)), 1.5);
@@ -321,7 +322,8 @@ public sealed class TimelineControl : FrameworkElement
         // Abstand der Markierungen so wählen, dass ca. alle 80 Pixel eine Zahl steht.
         var seconds = duration.TotalSeconds;
         double[] steps = { 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600 };
-        var step = steps.FirstOrDefault(s => width / (seconds / s) >= 80, 3600);
+        var usable = Math.Max(1, width - 2 * Pad);
+        var step = steps.FirstOrDefault(s => usable / (seconds / s) >= 80, 3600);
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         var y = StripTop + StripHeight;
         for (var s = 0.0; s <= seconds; s += step)
@@ -342,7 +344,9 @@ public sealed class TimelineControl : FrameworkElement
     }
 
     private double X(TimeSpan t) =>
-        _timeline is { Duration.TotalSeconds: > 0 } tl ? t.TotalSeconds / tl.Duration.TotalSeconds * ActualWidth : 0;
+        _timeline is { Duration.TotalSeconds: > 0 } tl
+            ? Pad + t.TotalSeconds / tl.Duration.TotalSeconds * Math.Max(0, ActualWidth - 2 * Pad)
+            : Pad;
 
     private TimeSpan TimeAt(double x)
     {
@@ -351,7 +355,7 @@ public sealed class TimelineControl : FrameworkElement
             return TimeSpan.Zero;
         }
 
-        var ratio = Math.Clamp(x / ActualWidth, 0, 1);
+        var ratio = Math.Clamp((x - Pad) / Math.Max(1, ActualWidth - 2 * Pad), 0, 1);
         return TimeSpan.FromSeconds(ratio * tl.Duration.TotalSeconds);
     }
 

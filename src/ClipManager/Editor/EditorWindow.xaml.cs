@@ -29,6 +29,7 @@ public partial class EditorWindow : FluentWindow
     private bool _resumeAfterScrub;
     private double _fps = 60;
     private TimeSpan _lastSeek = TimeSpan.MinValue;
+    private TimeSpan? _pendingSeek;
 
     private EditorWindow(ClipFile clip, MediaInfo? info)
     {
@@ -46,10 +47,13 @@ public partial class EditorWindow : FluentWindow
         _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(25) };
         _timer.Tick += Timer_Tick;
 
-        TimelineView.SeekRequested += (_, t) => Seek(t);
+        TimelineView.SeekRequested += (_, t) => ScrubTo(t);
         TimelineView.ScrubbingChanged += Timeline_ScrubbingChanged;
 
         Player.Volume = VolumeSlider.Value;
+
+        // Ton nur beim Abspielen. Sonst spielt der Player beim Springen/Ziehen kurze Tonfetzen ab.
+        Player.IsMuted = true;
         Player.Source = new Uri(clip.Path);
         Loaded += (_, _) =>
         {
@@ -110,8 +114,10 @@ public partial class EditorWindow : FluentWindow
         _timeline.Changed += Timeline_Changed;
         TimelineView.Timeline = _timeline;
         UpdateTexts();
+        // Direkt ab dem Anfang des Schnitts abspielen.
         Seek(_timeline.In);
         _timer.Start();
+        SetPlaying(true);
         _ = LoadFilmstripAsync(duration);
     }
 
@@ -173,8 +179,20 @@ public partial class EditorWindow : FluentWindow
             return;
         }
 
+        // Beim Ziehen höchstens alle 25 ms wirklich springen, sonst kommt der Player nicht hinterher.
+        if (_pendingSeek is { } pending)
+        {
+            _pendingSeek = null;
+            Player.Position = pending;
+        }
+
+        if (_scrubbing)
+        {
+            return;
+        }
+
         var pos = Position;
-        if (_playing && !_scrubbing)
+        if (_playing)
         {
             // Entfernte Teile und alles hinter dem Ende überspringen.
             if (PreviewCutsCheck.IsChecked == true)
@@ -217,11 +235,13 @@ public partial class EditorWindow : FluentWindow
         _playing = playing;
         if (playing)
         {
+            Player.IsMuted = false;
             Player.Play();
         }
         else
         {
             Player.Pause();
+            Player.IsMuted = true;
         }
 
         PlayButton.Icon = new SymbolIcon { Symbol = playing ? SymbolRegular.Pause24 : SymbolRegular.Play24, Filled = true };
@@ -257,6 +277,21 @@ public partial class EditorWindow : FluentWindow
         UpdatePositionText(t);
     }
 
+    /// <summary>Springen beim Ziehen auf der Zeitleiste: Anzeige sofort, Player gebremst (siehe Timer).</summary>
+    private void ScrubTo(TimeSpan t)
+    {
+        if (_timeline == null)
+        {
+            return;
+        }
+
+        t = t < TimeSpan.Zero ? TimeSpan.Zero : t > _timeline.Duration ? _timeline.Duration : t;
+        _pendingSeek = t;
+        _lastSeek = t;
+        TimelineView.Position = t;
+        UpdatePositionText(t);
+    }
+
     private void Step(TimeSpan delta) => Seek(Position + delta);
 
     private void Timeline_ScrubbingChanged(object? sender, bool scrubbing)
@@ -270,9 +305,19 @@ public partial class EditorWindow : FluentWindow
                 SetPlaying(false);
             }
         }
-        else if (_resumeAfterScrub)
+        else
         {
-            SetPlaying(true);
+            // Letzte Position sicher übernehmen, bevor es weitergeht.
+            if (_pendingSeek is { } pending)
+            {
+                _pendingSeek = null;
+                Player.Position = pending;
+            }
+
+            if (_resumeAfterScrub)
+            {
+                SetPlaying(true);
+            }
         }
     }
 
