@@ -1,3 +1,5 @@
+using ClipManager.Core.Editing;
+
 namespace ClipManager.Core.Export;
 
 public enum VideoEncoder
@@ -116,6 +118,9 @@ public static class ExportPlanner
     /// Welche Tonspuren standardmäßig in den Export kommen: Gibt es mehrere, ist Spur 1 bei OBS
     /// meist der Mix aus allen anderen. Dann nur die Einzelspuren nehmen, sonst ist alles doppelt.
     /// </summary>
+    public static IReadOnlyList<TrackEdit> DefaultMix(int trackCount) =>
+        DefaultAudioTracks(trackCount).Select(i => new TrackEdit(i, true, 1, Array.Empty<TimeRange>())).ToList();
+
     public static IReadOnlyList<int> DefaultAudioTracks(int trackCount) =>
         trackCount switch
         {

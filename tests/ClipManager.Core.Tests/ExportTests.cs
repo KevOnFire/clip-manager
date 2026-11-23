@@ -96,12 +96,13 @@ public class ExportTests
     {
         var plan = new ExportPlan(2000, 128, 720, 30, 1, false);
         var ranges = new[] { new TimeRange(S(2), S(4)), new TimeRange(S(6), S(7.5)) };
-        var filter = ExportCommand.BuildFilter(ranges, S(2), new[] { 1, 2 }, plan, 1080, 60);
+        var filter = ExportCommand.BuildFilter(ranges, S(2), ExportPlanner.DefaultMix(3), plan, 1080, 60);
         Assert.Contains("[0:v]trim=start=0:end=2,setpts=PTS-STARTPTS[v0]", filter);
         Assert.Contains("[0:v]trim=start=4:end=5.5,setpts=PTS-STARTPTS[v1]", filter);
         Assert.Contains("[v0][v1]concat=n=2:v=1:a=0[vc]", filter);
         Assert.Contains("[vc]scale=-2:720:flags=lanczos,fps=30[v]", filter);
-        Assert.Contains("[0:a:2]atrim=start=4:end=5.5", filter);
+        Assert.Contains("[0:a:2]asplit=2[s2_0][s2_1];", filter);
+        Assert.Contains("[s2_1]atrim=start=4:end=5.5", filter);
         Assert.Contains("[t1][t2]amix=inputs=2:duration=longest:normalize=0[a]", filter);
     }
 
@@ -109,7 +110,7 @@ public class ExportTests
     public void Filter_SingleRange_NoScaling()
     {
         var plan = new ExportPlan(9000, 128, 1080, 60, 1, false);
-        var filter = ExportCommand.BuildFilter(new[] { new TimeRange(S(0), S(10)) }, S(0), new[] { 0 }, plan, 1080, 60);
+        var filter = ExportCommand.BuildFilter(new[] { new TimeRange(S(0), S(10)) }, S(0), ExportPlanner.DefaultMix(1), plan, 1080, 60);
         Assert.Contains("[v0]null[v]", filter);
         Assert.Contains("[t0]anull[a]", filter);
         Assert.DoesNotContain("concat", filter);
@@ -119,7 +120,7 @@ public class ExportTests
     public void Command_UsesSeekAndEncoder()
     {
         var plan = new ExportPlan(2000, 128, 720, 60, 1, false);
-        var args = ExportCommand.Build("in.mp4", "out.mp4", new[] { new TimeRange(S(5), S(20)) }, new[] { 1 }, plan, VideoEncoder.Nvidia, 1080, 60).ToList();
+        var args = ExportCommand.Build("in.mp4", "out.mp4", new[] { new TimeRange(S(5), S(20)) }, ExportPlanner.DefaultMix(2), plan, VideoEncoder.Nvidia, 1080, 60).ToList();
         Assert.Equal("5", args[args.IndexOf("-ss") + 1]);
         Assert.Equal("15", args[args.IndexOf("-t") + 1]);
         Assert.Equal("h264_nvenc", args[args.IndexOf("-c:v") + 1]);
@@ -131,9 +132,79 @@ public class ExportTests
     public void Command_NoAudioTracks_NoAudioMap()
     {
         var plan = new ExportPlan(2000, 128, 720, 60, 1, false);
-        var args = ExportCommand.Build("in.mp4", "out.mp4", new[] { new TimeRange(S(0), S(2)) }, Array.Empty<int>(), plan, VideoEncoder.Cpu, 720, 60);
+        var args = ExportCommand.Build("in.mp4", "out.mp4", new[] { new TimeRange(S(0), S(2)) }, Array.Empty<TrackEdit>(), plan, VideoEncoder.Cpu, 720, 60);
         Assert.DoesNotContain("[a]", args);
         Assert.Contains("libx264", args);
+    }
+
+    [Fact]
+    public void GainFilter_VolumeAndMutedRanges()
+    {
+        var edit = new TrackEdit(3, true, 1.5, new[] { new TimeRange(S(1), S(3)), new TimeRange(S(8), S(9.25)) });
+        Assert.Equal("volume=1.5,asetnsamples=n=64:p=0,volume=0:enable='between(t,0,1)+between(t,5.994,7.25)',", ExportCommand.TrackGainFilter(edit, S(2)));
+        Assert.Equal(string.Empty, ExportCommand.TrackGainFilter(new TrackEdit(0, true, 1, Array.Empty<TimeRange>()), S(0)));
+    }
+
+    [Fact]
+    public async Task RealExport_MutedRangeIsSilent()
+    {
+        var ffmpeg = FfmpegLocator.Locate(null, Environment.GetEnvironmentVariable("CLIPMANAGER_FFMPEG_DIR") ?? "-", Environment.GetEnvironmentVariable("PATH"));
+        if (ffmpeg?.Ffprobe == null)
+        {
+            return;
+        }
+
+        using var dir = new TempDir();
+        var runner = new ProcessRunner();
+        var video = Path.Combine(dir.Path, "clip.mp4");
+        var make = await runner.RunAsync(
+            ffmpeg.Ffmpeg,
+            new[]
+            {
+                "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", "testsrc2=s=320x240:r=30:d=8",
+                "-f", "lavfi", "-i", "sine=f=440:d=8",
+                "-f", "lavfi", "-i", "sine=f=880:d=8",
+                "-map", "0", "-map", "1", "-map", "2",
+                "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-y", video,
+            },
+            TimeSpan.FromSeconds(60));
+        Assert.True(make.ExitCode == 0, make.StdErr);
+
+        // Spur 2 komplett aus, Spur 1 von 2–5 s stumm, Teil 3–4 rausgeschnitten → Ausgabe 1–2 s laut, 2–3 und 4–5 stumm.
+        var timeline = new EditTimeline(S(8));
+        timeline.InitTracks(2, new[] { 0, 1 });
+        timeline.SetIn(S(1));
+        timeline.SetOut(S(5));
+        timeline.RemoveRange(S(3), S(4));
+        timeline.Split(S(2));
+        timeline.ToggleTrackMuteAt(0, S(2.5));
+        timeline.ToggleTrackMuteAt(0, S(4.5));
+        timeline.SetTrackEnabled(1, false);
+        Assert.Equal(new[] { new TimeRange(S(2), S(3)), new TimeRange(S(4), S(5)) }, timeline.Tracks[0].Muted);
+
+        var output = Path.Combine(dir.Path, "out.mp4");
+        var result = await new Exporter().RunAsync(
+            new ExportRequest(ffmpeg.Ffmpeg, video, output, timeline.KeptRanges, timeline.AudibleTracks.ToList(), 240, 30, VideoEncoder.Cpu, null),
+            null,
+            CancellationToken.None);
+        Assert.True(result.Success, result.Error);
+
+        async Task<double> MaxVolume(double from, double to)
+        {
+            var r = await runner.RunAsync(
+                ffmpeg.Ffmpeg,
+                new[] { "-hide_banner", "-ss", from.ToString(System.Globalization.CultureInfo.InvariantCulture), "-t", (to - from).ToString(System.Globalization.CultureInfo.InvariantCulture), "-i", output, "-af", "volumedetect", "-vn", "-f", "null", "-" },
+                TimeSpan.FromSeconds(30));
+            var line = r.StdErr.Split('\n').First(l => l.Contains("max_volume"));
+            var value = line[(line.IndexOf("max_volume:") + 11)..].Replace("dB", string.Empty).Trim();
+            return double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var start = await MaxVolume(0.1, 0.9);
+        Assert.True(start > -30, $"Anfang sollte laut sein: {start} dB");
+        var silent = await MaxVolume(1.15, 2.85);
+        Assert.True(silent < -60, $"Stumme Stellen sollten still sein: {silent} dB");
     }
 
     [Theory]
@@ -187,7 +258,7 @@ public class ExportTests
         var output = Path.Combine(dir.Path, "out", "clip (Discord).mp4");
         var reports = new List<ExportProgress>();
         var result = await new Exporter().RunAsync(
-            new ExportRequest(ffmpeg.Ffmpeg, video, output, timeline.KeptRanges, ExportPlanner.DefaultAudioTracks(3), 720, 60, VideoEncoder.Cpu, 1),
+            new ExportRequest(ffmpeg.Ffmpeg, video, output, timeline.KeptRanges, ExportPlanner.DefaultMix(3), 720, 60, VideoEncoder.Cpu, 1),
             new SyncProgress(reports),
             CancellationToken.None);
 

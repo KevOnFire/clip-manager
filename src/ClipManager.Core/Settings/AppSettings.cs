@@ -20,6 +20,25 @@ public sealed class AppSettings
 
     public const int CurrentVersion = 1;
 
+    /// <summary>Eigene Namen für Tonspuren (Index ab 0), z.B. 2 → "Mikro". Gilt für alle Clips.</summary>
+    public Dictionary<int, string> TrackNames { get; set; } = new();
+
+    /// <summary>Anzeigename einer Spur: eigener Name, sonst Titel aus der Datei, sonst "Spur N".</summary>
+    public string TrackName(int index, string? titleFromFile, int trackCount)
+    {
+        if (TrackNames.TryGetValue(index, out var own) && !string.IsNullOrWhiteSpace(own))
+        {
+            return own;
+        }
+
+        if (!string.IsNullOrWhiteSpace(titleFromFile) && !titleFromFile.StartsWith("Track", StringComparison.OrdinalIgnoreCase))
+        {
+            return titleFromFile;
+        }
+
+        return index == 0 && trackCount > 1 ? "Spur 1 (Mix)" : $"Spur {index + 1}";
+    }
+
     /// <summary>Eigener Pfad zu ffmpeg.exe. Leer = automatisch suchen.</summary>
     public string? FfmpegPath { get; set; }
 

@@ -124,15 +124,42 @@
                         Content="Kopieren (in Discord Strg+V)"
                         Icon="{ui:SymbolIcon Copy24}" />
                     <ui:Button
+                        x:Name="ShowInExplorerButton"
+                        Margin="0,0,8,8"
+                        Click="ShowInExplorer_Click"
+                        Content="Im Explorer zeigen"
+                        Icon="{ui:SymbolIcon FolderOpen24}"
+                        Visibility="Collapsed" />
+                </WrapPanel>
+
+                <TextBlock
+                    Margin="0,8,0,6"
+                    FontWeight="SemiBold"
+                    Text="Speichern" />
+                <TextBlock
+                    Margin="0,0,0,8"
+                    FontSize="12"
+                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                    Text="Zum Reinziehen oder Kopieren musst du nichts speichern. Die Datei liegt nur zwischengespeichert und wird nach 2 Tagen weggeräumt."
+                    TextWrapping="Wrap" />
+                <WrapPanel>
+                    <ui:Button
+                        Margin="0,0,8,8"
+                        Click="Replace_Click"
+                        Content="Original ersetzen"
+                        Icon="{ui:SymbolIcon ArrowSwap24}"
+                        ToolTip="Das Original kommt in den Papierkorb, der geschnittene Clip nimmt seinen Platz ein" />
+                    <ui:Button
+                        Margin="0,0,8,8"
+                        Click="SaveCopy_Click"
+                        Content="Als Kopie speichern"
+                        Icon="{ui:SymbolIcon DocumentCopy24}"
+                        ToolTip="Neue Datei neben dem Original, das Original bleibt" />
+                    <ui:Button
                         Margin="0,0,8,8"
                         Click="SaveAs_Click"
                         Content="Speichern unter …"
                         Icon="{ui:SymbolIcon Save24}" />
-                    <ui:Button
-                        Margin="0,0,8,8"
-                        Click="ShowInExplorer_Click"
-                        Content="Im Explorer zeigen"
-                        Icon="{ui:SymbolIcon FolderOpen24}" />
                 </WrapPanel>
             </StackPanel>
         </StackPanel>

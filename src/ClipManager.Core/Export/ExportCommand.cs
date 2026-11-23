@@ -10,12 +10,12 @@ public static class ExportCommand
     private static string F(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
 
     /// <param name="ranges">Behaltene Bereiche im Original (aus <see cref="EditTimeline.KeptRanges"/>).</param>
-    /// <param name="audioTracks">Indizes der Tonspuren (0 = erste Spur), die gemischt werden.</param>
+    /// <param name="audioTracks">Tonspuren, die gemischt werden, mit Lautstärke und stummen Stellen.</param>
     public static IReadOnlyList<string> Build(
         string input,
         string output,
         IReadOnlyList<TimeRange> ranges,
-        IReadOnlyList<int> audioTracks,
+        IReadOnlyList<TrackEdit> audioTracks,
         ExportPlan plan,
         VideoEncoder encoder,
         int sourceHeight,
@@ -76,7 +76,7 @@ public static class ExportCommand
     public static string BuildFilter(
         IReadOnlyList<TimeRange> ranges,
         TimeSpan offset,
-        IReadOnlyList<int> audioTracks,
+        IReadOnlyList<TrackEdit> audioTracks,
         ExportPlan plan,
         int sourceHeight,
         double sourceFps)
@@ -124,12 +124,29 @@ public static class ExportCommand
         if (audioTracks.Count > 0)
         {
             sb.Append(';');
-            foreach (var track in audioTracks)
+            foreach (var edit in audioTracks)
             {
+                var track = edit.Index;
+
+                // Lautstärke und stumme Stellen zuerst, auf der ganzen Spur (Zeiten ab dem Sprungpunkt),
+                // danach in Stücke schneiden.
+                var gain = TrackGainFilter(edit, offset);
+                if (n > 1)
+                {
+                    sb.Append($"[0:a:{track}]{gain}asplit={n}");
+                    for (var i = 0; i < n; i++)
+                    {
+                        sb.Append($"[s{track}_{i}]");
+                    }
+
+                    sb.Append(';');
+                }
+
                 for (var i = 0; i < n; i++)
                 {
                     var (s, e) = (ranges[i].Start - offset, ranges[i].End - offset);
-                    sb.Append($"[0:a:{track}]atrim=start={F(s.TotalSeconds)}:end={F(e.TotalSeconds)},asetpts=PTS-STARTPTS[a{track}_{i}];");
+                    var source = n > 1 ? $"[s{track}_{i}]" : $"[0:a:{track}]{gain}";
+                    sb.Append($"{source}atrim=start={F(s.TotalSeconds)}:end={F(e.TotalSeconds)},asetpts=PTS-STARTPTS[a{track}_{i}];");
                 }
 
                 if (n > 1)
@@ -149,18 +166,47 @@ public static class ExportCommand
 
             if (audioTracks.Count == 1)
             {
-                sb.Append($"[t{audioTracks[0]}]anull[a]");
+                sb.Append($"[t{audioTracks[0].Index}]anull[a]");
             }
             else
             {
-                foreach (var track in audioTracks)
+                foreach (var edit in audioTracks)
                 {
-                    sb.Append($"[t{track}]");
+                    sb.Append($"[t{edit.Index}]");
                 }
 
                 // normalize=0: Spuren nicht leiser machen, nur zusammenlegen (wie OBS-Spur 1)
                 sb.Append($"amix=inputs={audioTracks.Count}:duration=longest:normalize=0[a]");
             }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Filter für Lautstärke und stumme Stellen einer Spur, mit Komma am Ende (oder leer).
+    /// Beispiel: "volume=1.5,asetnsamples=n=64:p=0,volume=0:enable='between(t,1.994,4)',".
+    /// </summary>
+    private const double MuteEdge = 0.006;
+
+    public static string TrackGainFilter(TrackEdit edit, TimeSpan offset)
+    {
+        var sb = new StringBuilder();
+        if (Math.Abs(edit.Volume - 1) > 0.001)
+        {
+            sb.Append($"volume={F(edit.Volume)},");
+        }
+
+        var muted = edit.Muted
+            .Select(r => (Start: (r.Start - offset).TotalSeconds, End: (r.End - offset).TotalSeconds))
+            .Where(r => r.End > 0)
+            .Select(r => $"between(t,{F(Math.Max(0, r.Start - MuteEdge))},{F(r.End)})")
+            .ToList();
+        if (muted.Count > 0)
+        {
+            // Kleine Audio-Pakete (64 Samples), damit "stumm" fast auf die Millisekunde genau greift,
+            // und ein paar Millisekunden Vorlauf, damit an der Kante kein Knacken durchrutscht.
+            sb.Append($"asetnsamples=n=64:p=0,volume=0:enable='{string.Join('+', muted)}',");
         }
 
         return sb.ToString();

@@ -10,7 +10,7 @@ public sealed record ExportRequest(
     string Input,
     string Output,
     IReadOnlyList<TimeRange> Ranges,
-    IReadOnlyList<int> AudioTracks,
+    IReadOnlyList<TrackEdit> AudioTracks,
     int SourceHeight,
     double SourceFps,
     VideoEncoder Encoder,

@@ -25,6 +25,9 @@ public sealed class ClipEditState
 
     /// <summary>Startzeitpunkte der entfernten Teile.</summary>
     public List<double> Removed { get; set; } = new();
+
+    /// <summary>Tonspuren. Null bei alten Einträgen oder wenn nie etwas an den Spuren geändert wurde.</summary>
+    public List<TrackEditState>? Tracks { get; set; }
 }
 
 /// <summary>
@@ -40,6 +43,8 @@ public sealed class EditTimeline
     private readonly List<TimeSpan> _splits = new();
     private readonly HashSet<TimeSpan> _removed = new();
     private readonly Stack<ClipEditState> _undo = new();
+    private List<TrackEdit> _tracks = new();
+    private List<TrackEdit> _defaultTracks = new();
 
     public EditTimeline(TimeSpan duration)
     {
@@ -63,7 +68,89 @@ public sealed class EditTimeline
     public bool CanUndo => _undo.Count > 0;
 
     /// <summary>True, wenn überhaupt etwas geändert wurde.</summary>
-    public bool IsEdited => In > TimeSpan.Zero || Out < Duration || _removed.Count > 0;
+    public bool IsEdited => In > TimeSpan.Zero || Out < Duration || _removed.Count > 0 || TracksEdited;
+
+    /// <summary>Alle Tonspuren mit ihrer Bearbeitung.</summary>
+    public IReadOnlyList<TrackEdit> Tracks => _tracks;
+
+    /// <summary>Spuren, die im Export und in der Vorschau zu hören sind.</summary>
+    public IEnumerable<TrackEdit> AudibleTracks => _tracks.Where(t => t.Enabled && t.Volume > 0);
+
+    private bool TracksEdited => !_tracks.SequenceEqual(_defaultTracks, TrackComparer.Instance);
+
+    /// <summary>
+    /// Legt die Spuren an. enabledByDefault: welche Spuren ohne Bearbeitung an sind
+    /// (bei OBS normalerweise alle außer Spur 1, dem Mix). Gespeicherte Spuren werden danach per Load geladen.
+    /// </summary>
+    public void InitTracks(int count, IEnumerable<int> enabledByDefault)
+    {
+        var enabled = enabledByDefault.ToHashSet();
+        _defaultTracks = Enumerable.Range(0, Math.Max(0, count))
+            .Select(i => new TrackEdit(i, enabled.Contains(i), 1, Array.Empty<TimeRange>()))
+            .ToList();
+        _tracks = _defaultTracks.ToList();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public bool SetTrackEnabled(int index, bool enabled)
+    {
+        if (TrackAt(index) is not { } track || track.Enabled == enabled)
+        {
+            return false;
+        }
+
+        Mutate(() => _tracks[index] = track with { Enabled = enabled });
+        return true;
+    }
+
+    /// <summary>
+    /// Lautstärke (1 = original, 0 = stumm, bis 2 = doppelt). recordUndo=false für Zwischenschritte
+    /// beim Ziehen eines Reglers; den Ausgangswert vorher mit BeginTrackVolumeChange sichern.
+    /// </summary>
+    public bool SetTrackVolume(int index, double volume, bool recordUndo = true)
+    {
+        volume = Math.Clamp(volume, 0, TrackEdit.MaxVolume);
+        if (TrackAt(index) is not { } track || Math.Abs(track.Volume - volume) < 0.0001)
+        {
+            return false;
+        }
+
+        if (recordUndo)
+        {
+            Mutate(() => _tracks[index] = track with { Volume = volume });
+        }
+        else
+        {
+            _tracks[index] = track with { Volume = volume };
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        return true;
+    }
+
+    /// <summary>Merkt den jetzigen Stand für Rückgängig, bevor ein Regler gezogen wird.</summary>
+    public void BeginTrackVolumeChange() => _undo.Push(Snapshot());
+
+    /// <summary>
+    /// Macht in einer Spur den Teil (zwischen zwei Schnitten) bei t stumm, oder wieder laut,
+    /// wenn er schon komplett stumm ist.
+    /// </summary>
+    public bool ToggleTrackMuteAt(int index, TimeSpan t)
+    {
+        if (TrackAt(index) is not { } track || SegmentAt(t) is not { } segment)
+        {
+            return false;
+        }
+
+        var range = new TimeRange(segment.Start, segment.End);
+        var muted = RangeSet.Covers(track.Muted, range)
+            ? RangeSet.Subtract(track.Muted, range)
+            : RangeSet.Add(track.Muted, range);
+        Mutate(() => _tracks[index] = track with { Muted = muted });
+        return true;
+    }
+
+    public bool IsTrackMutedAt(int index, TimeSpan t) => TrackAt(index)?.IsMutedAt(t) ?? true;
 
     /// <summary>Alle Teile zwischen In und Out, mit Markierung, ob sie entfernt sind.</summary>
     public IReadOnlyList<TimelineSegment> Segments
@@ -215,7 +302,7 @@ public sealed class EditTimeline
 
     public void Reset()
     {
-        if (!IsEdited && _splits.Count == 0)
+        if (!IsEdited && _splits.Count == 0 && !TracksEdited)
         {
             return;
         }
@@ -226,6 +313,7 @@ public sealed class EditTimeline
             Out = Duration;
             _splits.Clear();
             _removed.Clear();
+            _tracks = _defaultTracks.ToList();
         });
     }
 
@@ -317,6 +405,15 @@ public sealed class EditTimeline
         Out = Out.TotalSeconds,
         Splits = _splits.Select(s => s.TotalSeconds).ToList(),
         Removed = _removed.Select(s => s.TotalSeconds).OrderBy(s => s).ToList(),
+        Tracks = TracksEdited
+            ? _tracks.Select(t => new TrackEditState
+            {
+                Index = t.Index,
+                Enabled = t.Enabled,
+                Volume = t.Volume,
+                Muted = t.Muted.Select(r => new[] { r.Start.TotalSeconds, r.End.TotalSeconds }).ToList(),
+            }).ToList()
+            : null,
     };
 
     private void Restore(ClipEditState state)
@@ -336,6 +433,40 @@ public sealed class EditTimeline
         {
             _removed.Add(r);
         }
+
+        _tracks = _defaultTracks.ToList();
+        foreach (var saved in state.Tracks ?? new List<TrackEditState>())
+        {
+            if (saved.Index < 0 || saved.Index >= _tracks.Count)
+            {
+                continue;
+            }
+
+            var muted = new List<TimeRange>();
+            foreach (var pair in saved.Muted.Where(p => p is { Length: 2 }))
+            {
+                var range = new TimeRange(Clamp(TimeSpan.FromSeconds(pair[0])), Clamp(TimeSpan.FromSeconds(pair[1])));
+                muted = RangeSet.Add(muted, range);
+            }
+
+            _tracks[saved.Index] = new TrackEdit(saved.Index, saved.Enabled, Math.Clamp(saved.Volume, 0, TrackEdit.MaxVolume), muted);
+        }
+    }
+
+    private TrackEdit? TrackAt(int index) => index >= 0 && index < _tracks.Count ? _tracks[index] : null;
+
+    /// <summary>Vergleicht Spuren inhaltlich (die Listen der stummen Stellen sind eigene Objekte).</summary>
+    private sealed class TrackComparer : IEqualityComparer<TrackEdit>
+    {
+        public static readonly TrackComparer Instance = new();
+
+        public bool Equals(TrackEdit? x, TrackEdit? y) =>
+            x is not null && y is not null
+            && x.Index == y.Index && x.Enabled == y.Enabled
+            && Math.Abs(x.Volume - y.Volume) < 0.0001
+            && x.Muted.SequenceEqual(y.Muted);
+
+        public int GetHashCode(TrackEdit obj) => obj.Index;
     }
 
     private void Mutate(Action change)
