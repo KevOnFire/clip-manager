@@ -1,0 +1,175 @@
+<ui:FluentWindow
+    x:Class="ClipManager.Editor.EditorWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:editor="clr-namespace:ClipManager.Editor"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="Clip bearbeiten"
+    Width="1200"
+    Height="820"
+    MinWidth="820"
+    MinHeight="560"
+    ExtendsContentIntoTitleBar="True"
+    PreviewKeyDown="Window_PreviewKeyDown"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
+    WindowStartupLocation="CenterOwner">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar x:Name="TitleBarControl" Grid.Row="0" Title="Clip bearbeiten" />
+
+        <!-- Video -->
+        <Border
+            Grid.Row="1"
+            Margin="16,4,16,8"
+            Background="Black"
+            CornerRadius="8"
+            MouseLeftButtonDown="Video_MouseLeftButtonDown">
+            <Grid>
+                <MediaElement
+                    x:Name="Player"
+                    LoadedBehavior="Manual"
+                    MediaEnded="Player_MediaEnded"
+                    MediaFailed="Player_MediaFailed"
+                    MediaOpened="Player_MediaOpened"
+                    ScrubbingEnabled="True"
+                    Stretch="Uniform"
+                    UnloadedBehavior="Close" />
+                <TextBlock
+                    x:Name="LoadingText"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    FontSize="16"
+                    Foreground="#AAFFFFFF"
+                    Text="Lädt …" />
+            </Grid>
+        </Border>
+
+        <!-- Abspielleiste -->
+        <DockPanel Grid.Row="2" Margin="16,0,16,8" LastChildFill="False">
+            <ui:Button
+                x:Name="PlayButton"
+                Width="44"
+                Height="36"
+                Padding="0"
+                Click="PlayButton_Click"
+                DockPanel.Dock="Left"
+                Focusable="False"
+                Icon="{ui:SymbolIcon Play24, Filled=True}"
+                ToolTip="Abspielen / Pause (Leertaste)" />
+            <TextBlock
+                x:Name="PositionText"
+                Margin="12,0,0,0"
+                VerticalAlignment="Center"
+                DockPanel.Dock="Left"
+                FontFamily="Consolas"
+                FontSize="15"
+                Text="0:00.0 / 0:00.0" />
+            <TextBlock
+                x:Name="ResultText"
+                Margin="24,0,0,0"
+                VerticalAlignment="Center"
+                DockPanel.Dock="Left"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+            <Slider
+                x:Name="VolumeSlider"
+                Width="120"
+                VerticalAlignment="Center"
+                DockPanel.Dock="Right"
+                Focusable="False"
+                Maximum="1"
+                Minimum="0"
+                ToolTip="Lautstärke der Vorschau"
+                ValueChanged="VolumeSlider_ValueChanged"
+                Value="0.8" />
+            <ui:SymbolIcon
+                Margin="0,0,8,0"
+                VerticalAlignment="Center"
+                DockPanel.Dock="Right"
+                Symbol="Speaker224" />
+            <CheckBox
+                x:Name="PreviewCutsCheck"
+                Margin="0,0,20,0"
+                VerticalAlignment="Center"
+                Content="Schnitte in der Vorschau überspringen"
+                DockPanel.Dock="Right"
+                Focusable="False"
+                IsChecked="True" />
+        </DockPanel>
+
+        <!-- Zeitleiste -->
+        <Border
+            Grid.Row="3"
+            Margin="16,0,16,8"
+            CornerRadius="6"
+            ClipToBounds="True">
+            <editor:TimelineControl x:Name="TimelineView" />
+        </Border>
+
+        <!-- Werkzeuge -->
+        <WrapPanel Grid.Row="4" Margin="16,0,16,4">
+            <WrapPanel.Resources>
+                <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
+                    <Setter Property="Margin" Value="0,0,8,8" />
+                    <Setter Property="Focusable" Value="False" />
+                </Style>
+            </WrapPanel.Resources>
+            <ui:Button
+                Click="SetIn_Click"
+                Content="Anfang hier  (I)"
+                Icon="{ui:SymbolIcon ArrowStepIn24}"
+                ToolTip="Alles vor dem Abspielkopf fällt weg" />
+            <ui:Button
+                Click="SetOut_Click"
+                Content="Ende hier  (O)"
+                Icon="{ui:SymbolIcon ArrowStepOut24}"
+                ToolTip="Alles nach dem Abspielkopf fällt weg" />
+            <ui:Button
+                Click="Split_Click"
+                Content="Schneiden  (S)"
+                Icon="{ui:SymbolIcon Cut24}"
+                ToolTip="Setzt einen Schnitt am Abspielkopf. Danach kann ein Teil entfernt werden." />
+            <ui:Button
+                x:Name="RemoveButton"
+                Click="Remove_Click"
+                Content="Teil entfernen  (Entf)"
+                Icon="{ui:SymbolIcon Delete24}"
+                ToolTip="Entfernt den Teil unter dem Abspielkopf oder holt ihn zurück" />
+            <ui:Button
+                x:Name="UndoButton"
+                Click="Undo_Click"
+                Content="Rückgängig  (Strg+Z)"
+                Icon="{ui:SymbolIcon ArrowUndo24}" />
+            <ui:Button
+                Click="Reset_Click"
+                Content="Alles zurücksetzen"
+                Icon="{ui:SymbolIcon ArrowReset24}" />
+        </WrapPanel>
+
+        <DockPanel Grid.Row="5" Margin="16,0,16,14">
+            <ui:Button
+                x:Name="ExportButton"
+                Appearance="Primary"
+                Content="Exportieren"
+                DockPanel.Dock="Right"
+                Icon="{ui:SymbolIcon ArrowExportUp24}"
+                IsEnabled="False"
+                ToolTip="Kommt im nächsten Schritt (Etappe 4)" />
+            <TextBlock
+                VerticalAlignment="Center"
+                FontSize="12"
+                Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                Text="Leertaste: Abspielen · ← →: 1 s (mit Umschalt 5 s) · , .: einzelnes Bild · Pos1/Ende: zu Anfang/Ende · Der Originalclip wird nie verändert, Schnitte werden automatisch gespeichert."
+                TextWrapping="Wrap" />
+        </DockPanel>
+    </Grid>
+</ui:FluentWindow>

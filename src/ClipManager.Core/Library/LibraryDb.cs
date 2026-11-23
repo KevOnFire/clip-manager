@@ -1,11 +1,12 @@
 using System.Text.Json;
+using ClipManager.Core.Editing;
 using ClipManager.Core.Media;
 using Microsoft.Data.Sqlite;
 
 namespace ClipManager.Core.Library;
 
 /// <summary>
-/// Kleine SQLite-Datenbank für Favoriten und zwischengespeicherte Clip-Infos.
+/// Kleine SQLite-Datenbank für Favoriten, zwischengespeicherte Clip-Infos und Schnitte.
 /// Videodateien selbst werden nie angefasst.
 /// </summary>
 public sealed class LibraryDb
@@ -34,6 +35,11 @@ public sealed class LibraryDb
                 height INTEGER NOT NULL,
                 fps REAL NOT NULL,
                 audio_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS edits (
+                path TEXT PRIMARY KEY COLLATE NOCASE,
+                state_json TEXT NOT NULL,
+                updated INTEGER NOT NULL
             );
             """);
     }
@@ -121,14 +127,74 @@ public sealed class LibraryDb
             ("$fps", info.Fps),
             ("$audio", JsonSerializer.Serialize(info.AudioTracks)));
 
+    /// <summary>Gespeicherte Schnitte eines Clips oder null.</summary>
+    public ClipEditState? GetEdit(string path)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT state_json FROM edits WHERE path = $path";
+        command.Parameters.AddWithValue("$path", path);
+        if (command.ExecuteScalar() is not string json)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ClipEditState>(json);
+        }
+        catch (JsonException ex)
+        {
+            Log.Error($"Gespeicherte Schnitte für \"{path}\" sind kaputt und werden ignoriert", ex);
+            return null;
+        }
+    }
+
+    /// <summary>Speichert die Schnitte. Null oder "nichts geändert" löscht den Eintrag.</summary>
+    public void SaveEdit(string path, ClipEditState? state)
+    {
+        if (state == null)
+        {
+            Execute("DELETE FROM edits WHERE path = $path", ("$path", path));
+            return;
+        }
+
+        Execute(
+            """
+            INSERT INTO edits (path, state_json, updated) VALUES ($path, $json, $updated)
+            ON CONFLICT(path) DO UPDATE SET state_json = excluded.state_json, updated = excluded.updated
+            """,
+            ("$path", path),
+            ("$json", JsonSerializer.Serialize(state)),
+            ("$updated", DateTime.UtcNow.Ticks));
+    }
+
+    /// <summary>Alle Clips, für die Schnitte gespeichert sind (für das Schere-Symbol auf der Kachel).</summary>
+    public HashSet<string> GetEditedPaths()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT path FROM edits";
+        using var reader = command.ExecuteReader();
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (reader.Read())
+        {
+            result.Add(reader.GetString(0));
+        }
+
+        return result;
+    }
+
     /// <summary>Nach dem Umbenennen: Favorit und Infos wandern mit.</summary>
     public void MovePath(string oldPath, string newPath) =>
         Execute(
             """
             DELETE FROM favorites WHERE path = $new;
             DELETE FROM media_info WHERE path = $new;
+            DELETE FROM edits WHERE path = $new;
             UPDATE favorites SET path = $new WHERE path = $old;
             UPDATE media_info SET path = $new WHERE path = $old;
+            UPDATE edits SET path = $new WHERE path = $old;
             """,
             ("$old", oldPath),
             ("$new", newPath));
@@ -136,7 +202,7 @@ public sealed class LibraryDb
     /// <summary>Nach dem Löschen: Einträge entfernen.</summary>
     public void RemovePath(string path) =>
         Execute(
-            "DELETE FROM favorites WHERE path = $path; DELETE FROM media_info WHERE path = $path;",
+            "DELETE FROM favorites WHERE path = $path; DELETE FROM media_info WHERE path = $path; DELETE FROM edits WHERE path = $path;",
             ("$path", path));
 
     private SqliteConnection Open()

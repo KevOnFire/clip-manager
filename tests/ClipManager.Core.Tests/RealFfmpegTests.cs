@@ -51,5 +51,10 @@ public class RealFfmpegTests
         var thumb = await cache.GetOrCreateAsync(ffmpeg.Ffmpeg, clip, info.Duration);
         Assert.NotNull(thumb);
         Assert.True(new FileInfo(thumb!).Length > 1000);
+
+        var strips = new FilmstripCache(Path.Combine(dir.Path, "thumbs"), runner);
+        var strip = await strips.GetOrCreateAsync(ffmpeg.Ffmpeg, clip, info.Duration);
+        Assert.NotNull(strip);
+        Assert.True(new FileInfo(strip!).Length > 1000);
     }
 }
