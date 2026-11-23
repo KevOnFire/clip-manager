@@ -33,7 +33,6 @@ Aufnehmen macht OBS (Replay-Puffer), nicht dieses Programm.
 | Discord-Limits | Stufen Ohne Nitro / Nitro Basic / Nitro, Standard 10 / 50 / 500 MB, in den Einstellungen änderbar | Kev sagte anfangs 20 MB ohne Nitro, nicht abschließend geklärt |
 | Export-Format | H.264 + AAC in MP4 | Spielt in Discord überall direkt ab |
 | Updates | GitHub Releases, Update-Knopf im Programm | Kev soll nichts manuell runterladen |
-
 | Vorschau im Editor | Vorerst WPF `MediaElement` (Windows Media Foundation, keine Zusatz-DLLs) | Reicht für H.264-MP4 aus OBS, spielt aber nur die erste Tonspur (Spur 1 = Mix). Für Etappe 5 (Einzelspuren hören) Video stumm + NAudio, oder Wechsel auf LibVLC/mpv |
 
 Geplant, aber noch nicht umgesetzt: NAudio zum Mischen der Spuren in der Vorschau (Etappe 5),
