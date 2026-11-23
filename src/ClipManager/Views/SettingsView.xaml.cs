@@ -302,7 +302,7 @@ public partial class SettingsView : UserControl
             {
                 Width = 26,
                 Height = 26,
-                Margin = 3,
+                Margin = new Thickness(3),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 ToolTip = hex,
                 Template = SwatchTemplate(ToBrush(hex), hex == row.CurrentColor),
