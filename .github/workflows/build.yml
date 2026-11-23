@@ -1,0 +1,64 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      APP_VERSION: 0.${{ github.run_number }}.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Tests
+        run: dotnet test tests/ClipManager.Core.Tests -c Release
+
+      - name: Programm bauen
+        run: >
+          dotnet publish src/ClipManager/ClipManager.csproj -c Release -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ env.APP_VERSION }}
+          -o publish
+
+      - name: FFmpeg dazulegen
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
+          Invoke-WebRequest $url -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-tmp
+          $bin = Get-ChildItem ffmpeg-tmp -Recurse -Directory -Filter bin | Select-Object -First 1
+          New-Item -ItemType Directory -Force publish/ffmpeg | Out-Null
+          Copy-Item "$($bin.FullName)/*" publish/ffmpeg/
+          if (-not (Test-Path publish/ffmpeg/ffmpeg.exe)) { throw "ffmpeg.exe fehlt" }
+          if (-not (Test-Path publish/ffmpeg/ffprobe.exe)) { throw "ffprobe.exe fehlt" }
+          & publish/ffmpeg/ffmpeg.exe -hide_banner -version | Select-Object -First 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClipManager-win-x64
+          path: publish/
+          retention-days: 30
+
+      # Nur auf main: Release anlegen, das der Update-Knopf im Programm findet.
+      - name: Release erstellen
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          Compress-Archive -Path publish/* -DestinationPath ClipManager-win-x64.zip
+          gh release create "v$env:APP_VERSION" ClipManager-win-x64.zip --title "Clip Manager $env:APP_VERSION" --notes "$env:NOTES"
