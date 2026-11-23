@@ -45,6 +45,12 @@ public partial class App : Application
 
     public static string LogFolder => Path.GetDirectoryName(Log.FilePath) ?? AppDirectory;
 
+    private static Task<FfmpegStatus>? _ffmpegStatus;
+
+    /// <summary>FFmpeg- und GPU-Prüfung, nur einmal pro Programmstart (der GPU-Test dauert ein paar Sekunden).</summary>
+    public static Task<FfmpegStatus> GetFfmpegStatusAsync() =>
+        _ffmpegStatus ??= new FfmpegProbe(ProcessRunner).CheckAsync(LocateFfmpeg());
+
     public static void SaveSettings() => SettingsStore.Save(Settings);
 
     public static FfmpegPaths? LocateFfmpeg() =>

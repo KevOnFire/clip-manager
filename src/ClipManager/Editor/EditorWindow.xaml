@@ -161,9 +161,9 @@
                 Appearance="Primary"
                 Content="Exportieren"
                 DockPanel.Dock="Right"
+                Click="Export_Click"
                 Icon="{ui:SymbolIcon ArrowExportUp24}"
-                IsEnabled="False"
-                ToolTip="Kommt im nächsten Schritt (Etappe 4)" />
+                ToolTip="Clip passend fürs Discord-Limit exportieren" />
             <TextBlock
                 VerticalAlignment="Center"
                 FontSize="12"
