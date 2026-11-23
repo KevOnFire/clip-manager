@@ -29,7 +29,7 @@ public partial class EditorWindow : FluentWindow
     private bool _scrubbing;
     private bool _resumeAfterScrub;
     private double _fps = 60;
-    private TimeSpan _lastSeek = TimeSpan.MinValue;
+    private DateTime _lastSeekAt = DateTime.MinValue;
     private TimeSpan? _pendingSeek;
 
     private EditorWindow(ClipFile clip, MediaInfo? info)
@@ -116,10 +116,11 @@ public partial class EditorWindow : FluentWindow
         _timeline.Changed += Timeline_Changed;
         TimelineView.Timeline = _timeline;
         UpdateTexts();
-        // Direkt ab dem Anfang des Schnitts abspielen.
-        Seek(_timeline.In);
+        // Direkt ab dem Anfang des Schnitts abspielen. Erst abspielen, dann springen: Ein Sprung direkt
+        // nach dem Öffnen geht beim Windows-Player sonst manchmal verloren. Der Timer springt zur Not nochmal.
         _timer.Start();
         SetPlaying(true);
+        Seek(_timeline.In);
         _ = LoadFilmstripAsync(duration);
     }
 
@@ -206,7 +207,7 @@ public partial class EditorWindow : FluentWindow
                     return;
                 }
 
-                if (next.Value - pos > TimeSpan.FromMilliseconds(40) && next.Value != _lastSeek)
+                if (next.Value - pos > TimeSpan.FromMilliseconds(40) && DateTime.UtcNow - _lastSeekAt > TimeSpan.FromMilliseconds(250))
                 {
                     Seek(next.Value);
                     pos = next.Value;
@@ -256,10 +257,12 @@ public partial class EditorWindow : FluentWindow
             return;
         }
 
-        if (!_playing && PreviewCutsCheck.IsChecked == true && _timeline.NextPlayable(Position) == null)
+        if (!_playing && PreviewCutsCheck.IsChecked == true)
         {
+            // Vor dem Anfang oder in einem entfernten Teil: zum nächsten behaltenen Teil springen.
             // Am Ende angekommen: von vorne (ab dem Anfang des Schnitts) starten.
-            Seek(_timeline.In);
+            var next = _timeline.NextPlayable(Position);
+            Seek(next ?? _timeline.In);
         }
 
         SetPlaying(!_playing);
@@ -273,7 +276,7 @@ public partial class EditorWindow : FluentWindow
         }
 
         t = t < TimeSpan.Zero ? TimeSpan.Zero : t > _timeline.Duration ? _timeline.Duration : t;
-        _lastSeek = t;
+        _lastSeekAt = DateTime.UtcNow;
         Player.Position = t;
         TimelineView.Position = t;
         UpdatePositionText(t);
@@ -289,7 +292,7 @@ public partial class EditorWindow : FluentWindow
 
         t = t < TimeSpan.Zero ? TimeSpan.Zero : t > _timeline.Duration ? _timeline.Duration : t;
         _pendingSeek = t;
-        _lastSeek = t;
+        _lastSeekAt = DateTime.UtcNow;
         TimelineView.Position = t;
         UpdatePositionText(t);
     }
