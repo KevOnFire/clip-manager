@@ -43,7 +43,7 @@ public partial class ExportWindow : FluentWindow
         _editor = editor;
         _ranges = timeline.KeptRanges;
         _audio = timeline.AudibleTracks.ToList();
-        _outputDuration = ranges.Aggregate(TimeSpan.Zero, (sum, r) => sum + r.Duration);
+        _outputDuration = _ranges.Aggregate(TimeSpan.Zero, (sum, r) => sum + r.Duration);
 
         var s = App.Settings;
         TargetCombo.ItemsSource = new[]
