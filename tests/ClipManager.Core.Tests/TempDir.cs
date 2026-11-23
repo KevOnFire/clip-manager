@@ -12,7 +12,8 @@ internal sealed class TempDir : IDisposable
 
     public string File(string relative, DateTime? modifiedUtc = null, int bytes = 1)
     {
-        var full = System.IO.Path.Combine(Path, relative);
+        // GetFullPath macht aus "/" unter Windows "\", damit Pfade mit denen vom Dateisystem übereinstimmen.
+        var full = System.IO.Path.GetFullPath(System.IO.Path.Combine(Path, relative));
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
         System.IO.File.WriteAllBytes(full, new byte[bytes]);
         if (modifiedUtc is { } t)
