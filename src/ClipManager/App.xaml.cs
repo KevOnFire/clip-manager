@@ -20,8 +20,19 @@ public partial class App : Application
 
     public static AppSettings Settings { get; private set; } = null!;
 
-    /// <summary>Ordner, in dem die ClipManager.exe liegt.</summary>
-    public static string AppDirectory => AppContext.BaseDirectory;
+    /// <summary>
+    /// Ordner, in dem die ClipManager.exe liegt. Bewusst über den Prozesspfad und nicht über
+    /// AppContext.BaseDirectory, das bei Single-File-Programmen auf einen Entpack-Ordner zeigen kann.
+    /// </summary>
+    public static string AppDirectory =>
+        Path.GetDirectoryName(Environment.ProcessPath) is { Length: > 0 } dir ? dir : AppContext.BaseDirectory;
+
+    /// <summary>
+    /// True, wenn das Programm aus einem Temp-Ordner läuft, z.B. weil es direkt aus der ZIP-Datei
+    /// gestartet wurde, ohne sie zu entpacken. Dann fehlt der ffmpeg-Ordner daneben.
+    /// </summary>
+    public static bool RunsFromTempFolder =>
+        AppDirectory.StartsWith(Path.GetTempPath().TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Standard-Exportordner, falls in den Einstellungen keiner gewählt ist.</summary>
     public static string DefaultExportFolder =>
@@ -49,7 +60,7 @@ public partial class App : Application
 
         var localDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipManager");
         Log.FilePath = Path.Combine(localDir, "log.txt");
-        Log.Info($"Start, Version {AppUpdater.CurrentVersionText}, Ordner {AppDirectory}");
+        Log.Info($"Start, Version {AppUpdater.CurrentVersionText}, Ordner {AppDirectory} (BaseDirectory {AppContext.BaseDirectory})");
 
         var dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClipManager");
         SettingsStore = new SettingsStore(Path.Combine(dataDir, "settings.json"));

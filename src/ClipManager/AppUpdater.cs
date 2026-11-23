@@ -37,7 +37,7 @@ internal static class AppUpdater
     {
         try
         {
-            var probe = Path.Combine(AppContext.BaseDirectory, ".update-test");
+            var probe = Path.Combine(App.AppDirectory, ".update-test");
             File.WriteAllText(probe, "ok");
             File.Delete(probe);
             return true;
@@ -95,7 +95,7 @@ internal static class AppUpdater
         var script = Path.Combine(root, "update.cmd");
         await File.WriteAllTextAsync(
             script,
-            UpdateScript.Build(Environment.ProcessId, staging, AppContext.BaseDirectory, exeName),
+            UpdateScript.Build(Environment.ProcessId, staging, App.AppDirectory, exeName),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             cancellationToken);
 

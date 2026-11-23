@@ -181,6 +181,11 @@ public partial class LibraryView : UserControl
             text += $" · {missing} Ordner nicht gefunden";
         }
 
+        if (App.LocateFfmpeg() == null)
+        {
+            text += " · ⚠ FFmpeg fehlt, keine Vorschaubilder (siehe Einstellungen)";
+        }
+
         if (analyzed is { } done)
         {
             text += $" · analysiere {done} …";
