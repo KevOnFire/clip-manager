@@ -29,11 +29,22 @@
             <!-- Seitenleiste -->
             <DockPanel Grid.Column="0" Margin="12,8,8,12">
                 <TextBlock
+                    x:Name="VersionText"
                     DockPanel.Dock="Bottom"
                     Margin="8,0,0,0"
                     FontSize="11"
-                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                    Text="Version 0.2 · Etappe 2" />
+                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                <ui:Button
+                    x:Name="UpdateButton"
+                    Margin="0,0,0,8"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Appearance="Success"
+                    Click="UpdateButton_Click"
+                    Content="Update verfügbar"
+                    DockPanel.Dock="Bottom"
+                    Icon="{ui:SymbolIcon ArrowDownload24}"
+                    Visibility="Collapsed" />
                 <StackPanel>
                     <ui:Button
                         x:Name="LibraryNav"

@@ -8,7 +8,8 @@
     <RootNamespace>ClipManager</RootNamespace>
     <AssemblyName>ClipManager</AssemblyName>
     <Product>Clip Manager</Product>
-    <Version>0.2.0</Version>
+    <!-- Die echte Versionsnummer setzt der GitHub-Build (0.<Laufnummer>.0). -->
+    <Version>0.0.0</Version>
     <!-- Erlaubt das Bauen auf Nicht-Windows-Rechnern (z.B. in der Cloud); laufen tut es nur unter Windows. -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>

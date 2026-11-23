@@ -148,6 +148,30 @@
                 </StackPanel>
             </Border>
 
+            <!-- Updates -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CardTitle}" Text="Updates" />
+                    <TextBlock Style="{StaticResource Hint}" Text="Neue Versionen kommen direkt von GitHub. Beim Start wird automatisch nachgeschaut." />
+                    <TextBlock x:Name="UpdateStatusText" Style="{StaticResource Label}" TextWrapping="Wrap" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <ui:Button
+                            x:Name="CheckUpdateButton"
+                            Margin="0,0,8,0"
+                            Click="CheckUpdate_Click"
+                            Content="Nach Updates suchen"
+                            Icon="{ui:SymbolIcon ArrowSync24}" />
+                        <ui:Button
+                            x:Name="InstallUpdateButton"
+                            Appearance="Success"
+                            Click="InstallUpdate_Click"
+                            Content="Installieren"
+                            Icon="{ui:SymbolIcon ArrowDownload24}"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- FFmpeg -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
