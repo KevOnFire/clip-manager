@@ -161,7 +161,7 @@ public partial class SettingsView : UserControl
         try
         {
             var paths = App.LocateFfmpeg();
-            var status = await new FfmpegProbe(new ProcessRunner()).CheckAsync(paths);
+            var status = await new FfmpegProbe(App.ProcessRunner).CheckAsync(paths);
 
             FfmpegStatusText.Text = status.Found
                 ? $"✓ Gefunden, Version {status.Version}"

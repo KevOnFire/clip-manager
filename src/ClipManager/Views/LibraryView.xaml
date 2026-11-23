@@ -2,14 +2,149 @@
     x:Class="ClipManager.Views.LibraryView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:ClipManager.Views"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <local:FavoriteBrushConverter x:Key="FavoriteBrush" />
+
+        <ContextMenu x:Key="TileMenu" x:Shared="False">
+            <MenuItem Click="MenuPlay_Click" Header="Abspielen">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon Symbol="Play24" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Click="MenuRename_Click" Header="Umbenennen">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon Symbol="Rename24" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Click="MenuCopy_Click" Header="Kopie erstellen">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon Symbol="Copy24" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Click="MenuExplorer_Click" Header="Im Explorer zeigen">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon Symbol="FolderOpen24" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator />
+            <MenuItem Click="MenuDelete_Click" Header="Löschen (Papierkorb)">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon Symbol="Delete24" />
+                </MenuItem.Icon>
+            </MenuItem>
+        </ContextMenu>
+
+        <DataTemplate x:Key="TileTemplate" DataType="{x:Type local:ClipTileViewModel}">
+            <Border
+                Width="296"
+                Margin="0,0,16,16"
+                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                ContextMenu="{StaticResource TileMenu}"
+                CornerRadius="8"
+                Cursor="Hand"
+                MouseLeftButtonUp="Tile_Click"
+                ToolTip="{Binding Name}">
+                <StackPanel>
+                    <Grid Height="165" ClipToBounds="True">
+                        <Border Background="#FF0E0E12" CornerRadius="7,7,0,0">
+                            <ui:SymbolIcon
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontSize="36"
+                                Foreground="#55FFFFFF"
+                                Symbol="VideoClip24" />
+                        </Border>
+                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+
+                        <!-- Dauer oben rechts -->
+                        <Border
+                            Margin="8"
+                            Padding="8,2"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Background="#CC000000"
+                            CornerRadius="10"
+                            Visibility="{Binding HasDuration, Converter={StaticResource BoolToVis}}">
+                            <TextBlock
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="White"
+                                Text="{Binding DurationText}" />
+                        </Border>
+
+                        <!-- Favorit unten rechts -->
+                        <Button
+                            Width="34"
+                            Height="34"
+                            Margin="8"
+                            Padding="0"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            Background="#99000000"
+                            BorderThickness="0"
+                            Click="Star_Click"
+                            Cursor="Hand"
+                            ToolTip="Favorit">
+                            <ui:SymbolIcon
+                                FontSize="18"
+                                Filled="{Binding IsFavorite}"
+                                Foreground="{Binding IsFavorite, Converter={StaticResource FavoriteBrush}}"
+                                Symbol="Star24" />
+                        </Button>
+                    </Grid>
+
+                    <Grid Margin="12,10,4,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                Text="{Binding Name}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                FontSize="12"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="{Binding DateText}" />
+                            <TextBlock
+                                Margin="0,2,0,0"
+                                FontSize="12"
+                                Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                Text="{Binding Details}" />
+                        </StackPanel>
+                        <ui:Button
+                            Grid.Column="1"
+                            Padding="6"
+                            VerticalAlignment="Top"
+                            Appearance="Transparent"
+                            BorderThickness="0"
+                            Click="MoreButton_Click"
+                            Icon="{ui:SymbolIcon MoreVertical24}"
+                            ToolTip="Mehr" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0" Margin="0,0,0,16">
+        <!-- Kopfzeile -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,12">
             <StackPanel
                 VerticalAlignment="Center"
                 DockPanel.Dock="Right"
@@ -38,10 +173,50 @@
             </StackPanel>
         </DockPanel>
 
-        <!-- Noch keine Ordner -->
+        <!-- Filter -->
+        <WrapPanel
+            x:Name="FilterBar"
+            Grid.Row="1"
+            Margin="0,0,0,8">
+            <ui:TextBox
+                x:Name="SearchBox"
+                Width="240"
+                Margin="0,0,8,8"
+                Icon="{ui:SymbolIcon Search24}"
+                PlaceholderText="Suchen …"
+                TextChanged="SearchBox_TextChanged" />
+            <ComboBox
+                x:Name="ShowCombo"
+                Width="160"
+                Margin="0,0,8,8"
+                SelectedIndex="0"
+                SelectionChanged="Filter_Changed">
+                <ComboBoxItem Content="Alle Clips" />
+                <ComboBoxItem Content="★ Favoriten" />
+            </ComboBox>
+            <ComboBox
+                x:Name="FolderCombo"
+                Width="240"
+                Margin="0,0,8,8"
+                SelectionChanged="Filter_Changed" />
+            <ComboBox
+                x:Name="SortCombo"
+                Width="190"
+                Margin="0,0,8,8"
+                SelectedIndex="0"
+                SelectionChanged="Filter_Changed">
+                <ComboBoxItem Content="Neueste zuerst" />
+                <ComboBoxItem Content="Älteste zuerst" />
+                <ComboBoxItem Content="Längste zuerst" />
+                <ComboBoxItem Content="Größte zuerst" />
+                <ComboBoxItem Content="Name A–Z" />
+            </ComboBox>
+        </WrapPanel>
+
+        <!-- Leerer Zustand -->
         <StackPanel
             x:Name="EmptyState"
-            Grid.Row="1"
+            Grid.Row="2"
             HorizontalAlignment="Center"
             VerticalAlignment="Center">
             <ui:SymbolIcon
@@ -65,40 +240,45 @@
                 Text="Füge den Ordner hinzu, in den OBS deine Clips speichert." />
         </StackPanel>
 
-        <!-- Clip-Liste (in Etappe 2 werden daraus Kacheln mit Vorschaubild) -->
-        <ListView
-            x:Name="ClipList"
-            Grid.Row="1"
+        <!-- Kacheln -->
+        <ScrollViewer
+            x:Name="TileScroller"
+            Grid.Row="2"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto"
             Visibility="Collapsed">
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <Grid Margin="4,6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock
-                                FontWeight="SemiBold"
-                                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                Text="{Binding Name}"
-                                TextTrimming="CharacterEllipsis" />
-                            <TextBlock
-                                Margin="0,2,0,0"
-                                FontSize="12"
-                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                Text="{Binding Folder}"
-                                TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-                        <TextBlock
-                            Grid.Column="1"
-                            Margin="16,0,0,0"
-                            VerticalAlignment="Center"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding Details}" />
-                    </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+            <ItemsControl x:Name="TileList" ItemTemplate="{StaticResource TileTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Seiten -->
+        <StackPanel
+            x:Name="Pager"
+            Grid.Row="3"
+            Margin="0,8,0,0"
+            HorizontalAlignment="Center"
+            Orientation="Horizontal"
+            Visibility="Collapsed">
+            <ui:Button
+                x:Name="PrevButton"
+                Click="PrevPage_Click"
+                Content="Zurück"
+                Icon="{ui:SymbolIcon ChevronLeft24}" />
+            <TextBlock
+                x:Name="PageText"
+                Margin="16,0"
+                VerticalAlignment="Center"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ui:Button
+                x:Name="NextButton"
+                Click="NextPage_Click"
+                Content="Weiter"
+                Icon="{ui:SymbolIcon ChevronRight24}" />
+        </StackPanel>
     </Grid>
 </UserControl>

@@ -33,7 +33,7 @@
                     Margin="8,0,0,0"
                     FontSize="11"
                     Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                    Text="Version 0.1 · Etappe 1" />
+                    Text="Version 0.2 · Etappe 2" />
                 <StackPanel>
                     <ui:Button
                         x:Name="LibraryNav"

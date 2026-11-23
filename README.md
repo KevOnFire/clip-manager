@@ -21,7 +21,7 @@ Der Ordner `ffmpeg` muss neben der `ClipManager.exe` liegen bleiben.
 | Etappe | Inhalt | Status |
 | --- | --- | --- |
 | 1 | Grundgerüst, Einstellungen, FFmpeg- und GPU-Erkennung | in Arbeit |
-| 2 | Bibliothek mit Kacheln, Vorschaubildern, Favoriten | offen |
+| 2 | Bibliothek mit Kacheln, Vorschaubildern, Favoriten | in Arbeit |
 | 3 | Editor: kürzen, Mitte rausschneiden | offen |
 | 4 | Export fürs Discord-Limit, Drag-and-Drop | offen |
 | 5 | Audiospuren einzeln bearbeiten | offen |
