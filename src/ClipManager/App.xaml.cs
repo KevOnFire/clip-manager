@@ -16,6 +16,8 @@ public partial class App : Application
 
     public static ThumbnailCache Thumbnails { get; private set; } = null!;
 
+    public static FilmstripCache Filmstrips { get; private set; } = null!;
+
     public static IProcessRunner ProcessRunner { get; } = new ProcessRunner();
 
     public static AppSettings Settings { get; private set; } = null!;
@@ -68,6 +70,7 @@ public partial class App : Application
         Db = new LibraryDb(Path.Combine(dataDir, "library.db"));
 
         Thumbnails = new ThumbnailCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
+        Filmstrips = new FilmstripCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
 
         var ffmpeg = LocateFfmpeg();
         Log.Info(ffmpeg == null ? "FFmpeg nicht gefunden" : $"FFmpeg: {ffmpeg.Ffmpeg}, ffprobe: {ffmpeg.Ffprobe ?? "fehlt"}");

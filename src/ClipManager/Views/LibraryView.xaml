@@ -77,6 +77,22 @@
                                 Text="{Binding DurationText}" />
                         </Border>
 
+                        <!-- Schere oben links, wenn Schnitte gespeichert sind -->
+                        <Border
+                            Margin="8"
+                            Padding="7,3"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Background="#CC000000"
+                            CornerRadius="10"
+                            ToolTip="Geschnitten (Original unverändert)"
+                            Visibility="{Binding IsEdited, Converter={StaticResource BoolToVis}}">
+                            <ui:SymbolIcon
+                                FontSize="14"
+                                Foreground="#FFFFC83D"
+                                Symbol="Cut24" />
+                        </Border>
+
                         <!-- Favorit unten rechts -->
                         <Button
                             Width="34"

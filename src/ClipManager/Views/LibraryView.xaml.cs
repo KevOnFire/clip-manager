@@ -23,6 +23,7 @@ public partial class LibraryView : UserControl
     private IReadOnlyList<ClipFile> _allClips = Array.Empty<ClipFile>();
     private IReadOnlyList<ClipFile> _filtered = Array.Empty<ClipFile>();
     private HashSet<string> _favorites = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _edited = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, TimeSpan> _durations = new(StringComparer.OrdinalIgnoreCase);
     private string _signature = string.Empty;
     private int _page;
@@ -44,6 +45,7 @@ public partial class LibraryView : UserControl
             _watchTimer.Stop();
             await RefreshAsync(onlyIfChanged: true);
         };
+        Editor.EditorWindow.EditsSaved += OnEditsSaved;
     }
 
     /// <summary>Liest die Clip-Ordner neu ein.</summary>
@@ -69,8 +71,8 @@ public partial class LibraryView : UserControl
         }
 
         var exportFolder = App.ExportFolder;
-        var (clips, favorites, durations) = await Task.Run(() =>
-            (ClipScanner.Scan(folders, exportFolder), App.Db.GetFavorites(), App.Db.GetDurations()));
+        var (clips, favorites, durations, edited) = await Task.Run(() =>
+            (ClipScanner.Scan(folders, exportFolder), App.Db.GetFavorites(), App.Db.GetDurations(), App.Db.GetEditedPaths()));
 
         if (version != _refreshVersion)
         {
@@ -87,6 +89,7 @@ public partial class LibraryView : UserControl
         _allClips = clips;
         _favorites = favorites;
         _durations = durations;
+        _edited = edited;
         UpdateSummary(analyzed: null);
         ApplyFilter(resetPage: false);
         _ = AnalyzeAllAsync(clips);
@@ -142,7 +145,7 @@ public partial class LibraryView : UserControl
         }
 
         var tiles = LibraryQuery.Page(_filtered, _page, PageSize)
-            .Select(c => new ClipTileViewModel(c, _favorites.Contains(c.Path)))
+            .Select(c => new ClipTileViewModel(c, _favorites.Contains(c.Path), _edited.Contains(c.Path)))
             .ToList();
 
         TileList.ItemsSource = tiles;
@@ -433,10 +436,31 @@ public partial class LibraryView : UserControl
 
     private void Tile_Click(object sender, MouseButtonEventArgs e)
     {
-        // Der Editor kommt in Etappe 3. Bis dahin öffnet ein Klick den Clip im Standard-Player.
         if (TileOf(sender) is { } tile)
         {
-            ShellFiles.OpenWithDefaultApp(tile.Clip.Path);
+            Editor.EditorWindow.OpenFor(tile.Clip, tile.Info, Window.GetWindow(this));
+        }
+    }
+
+    /// <summary>Der Editor hat Schnitte gespeichert oder gelöscht: Schere auf der Kachel anpassen.</summary>
+    private void OnEditsSaved(object? sender, string path)
+    {
+        var edited = App.Db.GetEdit(path) != null;
+        if (edited)
+        {
+            _edited.Add(path);
+        }
+        else
+        {
+            _edited.Remove(path);
+        }
+
+        if (TileList.ItemsSource is IEnumerable<ClipTileViewModel> tiles)
+        {
+            foreach (var tile in tiles.Where(t => string.Equals(t.Clip.Path, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                tile.IsEdited = edited;
+            }
         }
     }
 

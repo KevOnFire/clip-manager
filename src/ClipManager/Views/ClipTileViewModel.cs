@@ -15,13 +15,15 @@ public sealed class ClipTileViewModel : INotifyPropertyChanged
     private static readonly CultureInfo German = CultureInfo.GetCultureInfo("de-DE");
 
     private bool _isFavorite;
+    private bool _isEdited;
     private ImageSource? _thumbnail;
     private MediaInfo? _info;
 
-    public ClipTileViewModel(ClipFile clip, bool isFavorite)
+    public ClipTileViewModel(ClipFile clip, bool isFavorite, bool isEdited = false)
     {
         Clip = clip;
         _isFavorite = isFavorite;
+        _isEdited = isEdited;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -61,6 +63,20 @@ public sealed class ClipTileViewModel : INotifyPropertyChanged
             if (_isFavorite != value)
             {
                 _isFavorite = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>Für diesen Clip sind Schnitte gespeichert (Schere auf der Kachel).</summary>
+    public bool IsEdited
+    {
+        get => _isEdited;
+        set
+        {
+            if (_isEdited != value)
+            {
+                _isEdited = value;
                 OnPropertyChanged();
             }
         }

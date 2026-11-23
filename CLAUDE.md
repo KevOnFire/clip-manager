@@ -33,22 +33,26 @@ Aufnehmen macht OBS (Replay-Puffer), nicht dieses Programm.
 | Discord-Limits | Stufen Ohne Nitro / Nitro Basic / Nitro, Standard 10 / 50 / 500 MB, in den Einstellungen änderbar | Kev sagte anfangs 20 MB ohne Nitro, nicht abschließend geklärt |
 | Export-Format | H.264 + AAC in MP4 | Spielt in Discord überall direkt ab |
 | Updates | GitHub Releases, Update-Knopf im Programm | Kev soll nichts manuell runterladen |
+| Vorschau im Editor | Vorerst WPF `MediaElement` (Windows Media Foundation, keine Zusatz-DLLs) | Reicht für H.264-MP4 aus OBS, spielt aber nur die erste Tonspur (Spur 1 = Mix). Für Etappe 5 (Einzelspuren hören) Video stumm + NAudio, oder Wechsel auf LibVLC/mpv |
 
-Geplant, aber noch nicht umgesetzt: mpv oder LibVLC als Player im Editor, NAudio zum Mischen
-der Spuren in der Vorschau (siehe Etappe 3 und 5).
+Geplant, aber noch nicht umgesetzt: NAudio zum Mischen der Spuren in der Vorschau (Etappe 5),
+ggf. LibVLC/mpv, falls MediaElement bei manchen Formaten (MKV, HEVC) nicht reicht.
 
 ## Aufbau
 
 ```
 src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linux, hat Tests)
   Settings/               AppSettings, SettingsStore (JSON), DiscordTier
+  Editing/                EditTimeline (Anfang/Ende, Schnitte, entfernte Teile, Rückgängig), ClipEditState (JSON), TimeText
   Library/                ClipScanner, ClipFile, LibraryDb (SQLite), LibraryQuery (Filter/Sort/Seiten), ClipFileOps (Kopie/Umbenennen)
-  Media/                  FfmpegLocator, FfmpegProbe (Version + GPU-Test), MediaInfo (ffprobe), ThumbnailCache, ProcessRunner
+  Media/                  FfmpegLocator, FfmpegProbe (Version + GPU-Test), MediaInfo (ffprobe), ThumbnailCache, FilmstripCache (Zeitleiste), ProcessRunner
   Updates/                UpdateChecker (GitHub-API), UpdateScript (cmd zum Ersetzen + Neustart)
 src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   App.xaml(.cs)           Start, globale Dienste (Settings, Db, Thumbnails)
   MainWindow              Seitenleiste (Bibliothek, Einstellungen, Update-Knopf)
-  Views/LibraryView       Kacheln, Seiten, Filter, Menü, Ordner-Überwachung
+  Views/LibraryView       Kacheln, Seiten, Filter, Menü, Ordner-Überwachung, Klick öffnet Editor
+  Editor/EditorWindow     Editor-Fenster: Player, Tastenkürzel, speichert Schnitte automatisch in der DB
+  Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf)
   Views/SettingsView      Ordner, Discord, Export-Ordner, Updates, FFmpeg/GPU
   AppUpdater, ShellFiles, Dialogs, FolderPicker
 tests/ClipManager.Core.Tests/   xUnit-Tests für Core
@@ -80,8 +84,9 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | Was | Wo |
 | --- | --- |
 | Einstellungen | `%AppData%\ClipManager\settings.json` |
-| Favoriten, Clip-Infos | `%AppData%\ClipManager\library.db` |
-| Vorschaubilder | `%LocalAppData%\ClipManager\thumbs\` |
+| Favoriten, Clip-Infos, Schnitte (Tabelle `edits`) | `%AppData%\ClipManager\library.db` |
+| Vorschaubilder, Filmstreifen | `%LocalAppData%\ClipManager\thumbs\` |
+| Fehler-Log | `%LocalAppData%\ClipManager\log.txt` |
 | Exporte (Standard) | `Videos\Clip Manager Exporte` |
 
 ## Kevs OBS-Setup (Referenz für Tests und Spuren-Namen)
@@ -98,7 +103,7 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | 1 | Grundgerüst, Einstellungen, FFmpeg- und GPU-Erkennung | fertig (PR #1) |
 | 2 | Bibliothek: Kacheln, Vorschaubilder, Dauer, Favoriten, Seiten, Suche/Sortierung, Umbenennen/Kopie/Löschen, Ordner-Überwachung | fertig (PR #2) |
 | – | Update-Knopf, Releases, diese Übergabe-Datei | fertig (in PR #2) |
-| 3 | Editor Teil 1: Player, Zeitleiste mit Vorschaubildern, Anfang/Ende kürzen, Stellen in der Mitte rausschneiden, Tastenkürzel | offen |
+| 3 | Editor Teil 1: Player, Zeitleiste mit Vorschaubildern, Anfang/Ende kürzen, Stellen in der Mitte rausschneiden, Tastenkürzel | in PR #4 (Klicktest durch Kev offen) |
 | 4 | Export: Discord-Stufen, Bitrate-Rechnung, GPU-Encoder, Fortschritt, fertigen Clip per Drag-and-Drop aus dem Programm ziehen, "Speichern unter" | offen |
 | 5 | Editor Teil 2: Audiospuren einzeln (Lautstärke, stumm, stumme Bereiche), Vorschau hört genau, was exportiert wird | offen |
 | 6 | Feinschliff: Hover-Vorschau auf Kacheln, Design, Fehlerfälle | offen |
