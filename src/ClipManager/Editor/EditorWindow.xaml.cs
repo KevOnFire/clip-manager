@@ -588,6 +588,11 @@ public partial class EditorWindow : FluentWindow
     /// <summary>Menü nach dem Aufziehen eines Bereichs in einer Spur.</summary>
     private void ShowRangeMenu(int track, TimeSpan start, TimeSpan end)
     {
+        if (track < 0)
+        {
+            return;
+        }
+
         var name = track < _trackRows.Count ? _trackRows[track].Name : $"Spur {track + 1}";
         var length = TimeText.Format(end - start);
         ShowMenu(
@@ -602,6 +607,8 @@ public partial class EditorWindow : FluentWindow
 
     private static System.Windows.Media.Color TrackColorOf(int index) =>
         (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.Settings.TrackColor(index));
+
+    private System.Windows.Controls.ContextMenu? _openMenu;
 
     private void ShowMenu(params (string Text, Wpf.Ui.Controls.SymbolRegular Icon, Action Action)[] items)
     {
@@ -621,7 +628,16 @@ public partial class EditorWindow : FluentWindow
             menu.Items.Add(item);
         }
 
-        menu.Closed += (_, _) => TimelineView.ClearSelection();
+        // Nur das zuletzt geöffnete Menü darf die Auswahl wegnehmen (ein altes schließt sich evtl. später).
+        _openMenu = menu;
+        menu.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_openMenu, menu))
+            {
+                _openMenu = null;
+                TimelineView.ClearSelection();
+            }
+        };
         menu.IsOpen = true;
     }
 

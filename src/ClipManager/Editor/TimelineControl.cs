@@ -442,7 +442,8 @@ public sealed class TimelineControl : FrameworkElement
     /// <summary>Entfernt die markierte Auswahl (nachdem das Menü dazu zu ist).</summary>
     public void ClearSelection()
     {
-        if (_selTrack >= 0)
+        // Schließt sich das alte Menü erst, während schon neu gezogen wird, die neue Auswahl behalten.
+        if (_selTrack >= 0 && _drag != DragMode.LaneSelect)
         {
             _selTrack = -1;
             InvalidateVisual();
@@ -498,6 +499,12 @@ public sealed class TimelineControl : FrameworkElement
                 break;
             case DragMode.LaneSelect:
                 var track = _selTrack;
+                if (track < 0 || track >= TrackCount)
+                {
+                    ClearSelection();
+                    return;
+                }
+
                 if (_moved && up != null && (_selEnd - _selStart).Duration() >= EditTimeline.MinSegment)
                 {
                     InvalidateVisual();
