@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ClipManager</RootNamespace>
+    <AssemblyName>ClipManager</AssemblyName>
+    <Product>Clip Manager</Product>
+    <Version>0.1.0</Version>
+    <!-- Erlaubt das Bauen auf Nicht-Windows-Rechnern (z.B. in der Cloud); laufen tut es nur unter Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WPF-UI" Version="3.0.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ClipManager.Core\ClipManager.Core.csproj" />
+  </ItemGroup>
+</Project>

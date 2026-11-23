@@ -1,0 +1,104 @@
+<UserControl
+    x:Class="ClipManager.Views.LibraryView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" Margin="0,0,0,16">
+            <StackPanel
+                VerticalAlignment="Center"
+                DockPanel.Dock="Right"
+                Orientation="Horizontal">
+                <ui:Button
+                    Margin="0,0,8,0"
+                    Click="Refresh_Click"
+                    Content="Aktualisieren"
+                    Icon="{ui:SymbolIcon ArrowClockwise24}" />
+                <ui:Button
+                    Appearance="Primary"
+                    Click="AddFolder_Click"
+                    Content="Ordner hinzufügen"
+                    Icon="{ui:SymbolIcon FolderAdd24}" />
+            </StackPanel>
+            <StackPanel>
+                <TextBlock
+                    FontSize="28"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                    Text="Bibliothek" />
+                <TextBlock
+                    x:Name="SummaryText"
+                    Margin="0,4,0,0"
+                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Noch keine Ordner -->
+        <StackPanel
+            x:Name="EmptyState"
+            Grid.Row="1"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+            <ui:SymbolIcon
+                HorizontalAlignment="Center"
+                FontSize="56"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Symbol="VideoClip24" />
+            <TextBlock
+                x:Name="EmptyTitle"
+                Margin="0,12,0,0"
+                HorizontalAlignment="Center"
+                FontSize="18"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                Text="Noch keine Clip-Ordner" />
+            <TextBlock
+                x:Name="EmptyHint"
+                Margin="0,6,0,0"
+                HorizontalAlignment="Center"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Text="Füge den Ordner hinzu, in den OBS deine Clips speichert." />
+        </StackPanel>
+
+        <!-- Clip-Liste (in Etappe 2 werden daraus Kacheln mit Vorschaubild) -->
+        <ListView
+            x:Name="ClipList"
+            Grid.Row="1"
+            Visibility="Collapsed">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="4,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                Text="{Binding Name}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Margin="0,2,0,0"
+                                FontSize="12"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="{Binding Folder}"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <TextBlock
+                            Grid.Column="1"
+                            Margin="16,0,0,0"
+                            VerticalAlignment="Center"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="{Binding Details}" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</UserControl>

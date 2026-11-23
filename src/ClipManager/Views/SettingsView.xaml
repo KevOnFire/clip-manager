@@ -1,0 +1,192 @@
+<UserControl
+    x:Class="ClipManager.Views.SettingsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <UserControl.Resources>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+        <Style x:Key="CardTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,4,0,12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+            <TextBlock
+                Margin="0,0,0,16"
+                FontSize="28"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                Text="Einstellungen" />
+
+            <!-- Clip-Ordner -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CardTitle}" Text="Clip-Ordner" />
+                    <TextBlock Style="{StaticResource Hint}" Text="Hier sucht das Programm nach deinen Clips, inklusive Unterordnern." />
+                    <ListBox
+                        x:Name="FolderList"
+                        MinHeight="60"
+                        MaxHeight="220" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <ui:Button
+                            Margin="0,0,8,0"
+                            Appearance="Primary"
+                            Click="AddFolder_Click"
+                            Content="Ordner hinzufügen"
+                            Icon="{ui:SymbolIcon FolderAdd24}" />
+                        <ui:Button
+                            Click="RemoveFolder_Click"
+                            Content="Entfernen"
+                            Icon="{ui:SymbolIcon Delete24}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Discord -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CardTitle}" Text="Discord" />
+                    <TextBlock Style="{StaticResource Hint}" Text="Deine Stufe ist beim Export vorausgewählt. Falls Discord die Limits ändert, kannst du sie hier anpassen." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Style="{StaticResource Label}" Text="Ich habe" />
+                        <ComboBox
+                            x:Name="TierCombo"
+                            Grid.Column="1"
+                            Width="260"
+                            HorizontalAlignment="Left"
+                            SelectionChanged="TierCombo_SelectionChanged" />
+
+                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource Label}" Text="Limit ohne Nitro (MB)" />
+                        <TextBox
+                            x:Name="FreeLimitBox"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Width="120"
+                            Margin="0,12,0,0"
+                            HorizontalAlignment="Left"
+                            LostFocus="LimitBox_LostFocus" />
+
+                        <TextBlock Grid.Row="2" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Limit Nitro Basic (MB)" />
+                        <TextBox
+                            x:Name="BasicLimitBox"
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Width="120"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Left"
+                            LostFocus="LimitBox_LostFocus" />
+
+                        <TextBlock Grid.Row="3" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Limit Nitro (MB)" />
+                        <TextBox
+                            x:Name="NitroLimitBox"
+                            Grid.Row="3"
+                            Grid.Column="1"
+                            Width="120"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Left"
+                            LostFocus="LimitBox_LostFocus" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Export-Ordner -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CardTitle}" Text="Export-Ordner" />
+                    <TextBlock Style="{StaticResource Hint}" Text="Hier landen fertig komprimierte Clips. Clips in diesem Ordner tauchen nicht in der Bibliothek auf." />
+                    <TextBlock
+                        x:Name="ExportFolderText"
+                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                        TextTrimming="CharacterEllipsis" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <ui:Button
+                            Margin="0,0,8,0"
+                            Click="ChangeExportFolder_Click"
+                            Content="Ändern"
+                            Icon="{ui:SymbolIcon Folder24}" />
+                        <ui:Button
+                            Margin="0,0,8,0"
+                            Click="OpenExportFolder_Click"
+                            Content="Öffnen"
+                            Icon="{ui:SymbolIcon Open24}" />
+                        <ui:Button
+                            x:Name="ResetExportFolderButton"
+                            Click="ResetExportFolder_Click"
+                            Content="Standard"
+                            Icon="{ui:SymbolIcon ArrowReset24}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- FFmpeg -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CardTitle}" Text="FFmpeg und Grafikkarte" />
+                    <TextBlock Style="{StaticResource Hint}" Text="FFmpeg schneidet und komprimiert die Clips. Mit NVIDIA oder AMD geht der Export über die Grafikkarte deutlich schneller." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="180" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Style="{StaticResource Label}" Text="Status" />
+                        <TextBlock x:Name="FfmpegStatusText" Grid.Column="1" Style="{StaticResource Label}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="1" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Pfad" />
+                        <TextBlock
+                            x:Name="FfmpegPathText"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Margin="0,8,0,0"
+                            Style="{StaticResource Label}"
+                            TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Row="2" Margin="0,8,0,0" Style="{StaticResource Label}" Text="NVIDIA (NVENC)" />
+                        <TextBlock x:Name="NvidiaText" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource Label}" />
+                        <TextBlock Grid.Row="3" Margin="0,8,0,0" Style="{StaticResource Label}" Text="AMD (AMF)" />
+                        <TextBlock x:Name="AmdText" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource Label}" />
+                    </Grid>
+                    <ui:Button
+                        x:Name="CheckFfmpegButton"
+                        Margin="0,12,0,0"
+                        Click="CheckFfmpeg_Click"
+                        Content="Erneut prüfen"
+                        Icon="{ui:SymbolIcon ArrowClockwise24}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
