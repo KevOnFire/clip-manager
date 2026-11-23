@@ -58,8 +58,9 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
                           rausgeschnittenen Stellen ziehbar, Klick auf so eine Stelle = Menü (wieder laut / reinnehmen)
   Editor/ExportWindow     Export-/Speichern-Dialog: Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Original ersetzen / Kopie / Speichern unter
   Editor/TrackPlayer      NAudio: Spuren gemischt abspielen (an/aus, Lautstärke, stumme Stellen)
-  Editor/TrackRowViewModel  Spur-Kopf (Name, Haken, Lautstärke); Namen global in settings.json (TrackNames)
-  Views/SettingsView      Ordner, Discord, Tonspur-Namen (+/–), Export-Ordner, Updates, FFmpeg/GPU
+  Editor/TrackRowViewModel  Spur-Kopf (Farbstreifen, Name, Haken, Lautstärke); Namen und Farben global in settings.json
+                          (TrackNames, TrackColors; Standardfarben in AppSettings.Palette)
+  Views/SettingsView      Ordner, Discord, Tonspuren (Name + Farbe, +/–), Export-Ordner, Updates, FFmpeg/GPU
   AppUpdater, ShellFiles, Dialogs, FolderPicker
 tests/ClipManager.Core.Tests/   xUnit-Tests für Core
 .github/workflows/build.yml     Windows-Build, Tests, FFmpeg dazu, Artifact, Release auf main

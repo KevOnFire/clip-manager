@@ -56,8 +56,8 @@ public partial class EditorWindow : FluentWindow
         TimelineView.SeekRequested += (_, t) => ScrubTo(t);
         TimelineView.ScrubbingChanged += Timeline_ScrubbingChanged;
         TimelineView.RangeSelected += (_, e) => ShowRangeMenu(e.Track, e.Start, e.End);
-        TimelineView.MutedClicked += (_, e) => ShowMenu(("Wieder laut machen", () => _timeline?.UnmuteTrackAt(e.Track, e.Time)));
-        TimelineView.RemovedClicked += (_, t) => ShowMenu(("Wieder reinnehmen", () => _timeline?.RestoreAt(t)));
+        TimelineView.MutedClicked += (_, e) => ShowMenu(("Wieder laut machen", Wpf.Ui.Controls.SymbolRegular.Speaker224, () => _timeline?.UnmuteTrackAt(e.Track, e.Time)));
+        TimelineView.RemovedClicked += (_, t) => ShowMenu(("Wieder reinnehmen", Wpf.Ui.Controls.SymbolRegular.ArrowUndo24, () => _timeline?.RestoreAt(t)));
 
         Player.Volume = VolumeSlider.Value;
 
@@ -160,9 +160,10 @@ public partial class EditorWindow : FluentWindow
 
         var count = _timeline.Tracks.Count;
         _trackRows = Enumerable.Range(0, count)
-            .Select(i => new TrackRowViewModel(_timeline, i, App.Settings.TrackName(i, _info?.AudioTracks.ElementAtOrDefault(i)?.Title, count)))
+            .Select(i => new TrackRowViewModel(_timeline, i, App.Settings.TrackName(i, _info?.AudioTracks.ElementAtOrDefault(i)?.Title, count), TrackColorOf(i)))
             .ToList();
         TrackHeaders.ItemsSource = _trackRows;
+        TimelineView.TrackColors = Enumerable.Range(0, count).Select(i => TrackColorOf(i)).ToList();
         TracksHint.Text = count switch
         {
             0 => "Dieser Clip hat keinen Ton.",
@@ -590,25 +591,32 @@ public partial class EditorWindow : FluentWindow
         var name = track < _trackRows.Count ? _trackRows[track].Name : $"Spur {track + 1}";
         var length = TimeText.Format(end - start);
         ShowMenu(
-            ($"Nur in \"{name}\" stumm schalten ({length})", () => _timeline?.MuteTrackRange(track, start, end)),
-            ($"Aus dem ganzen Clip rausschneiden ({length})", () => _timeline?.RemoveRange(start, end)),
-            ("Ab hier abspielen", () =>
+            ($"Nur in \"{name}\" stumm schalten ({length})", Wpf.Ui.Controls.SymbolRegular.SpeakerMute24, () => _timeline?.MuteTrackRange(track, start, end)),
+            ($"Aus dem ganzen Clip rausschneiden ({length})", Wpf.Ui.Controls.SymbolRegular.Cut24, () => _timeline?.RemoveRange(start, end)),
+            ("Ab hier abspielen", Wpf.Ui.Controls.SymbolRegular.Play24, () =>
             {
                 Seek(start);
                 SetPlaying(true);
             }));
     }
 
-    private void ShowMenu(params (string Text, Action Action)[] items)
+    private static System.Windows.Media.Color TrackColorOf(int index) =>
+        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.Settings.TrackColor(index));
+
+    private void ShowMenu(params (string Text, Wpf.Ui.Controls.SymbolRegular Icon, Action Action)[] items)
     {
         var menu = new System.Windows.Controls.ContextMenu
         {
             PlacementTarget = TimelineView,
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint,
         };
-        foreach (var (text, action) in items)
+        foreach (var (text, icon, action) in items)
         {
-            var item = new System.Windows.Controls.MenuItem { Header = text };
+            var item = new System.Windows.Controls.MenuItem
+            {
+                Header = text,
+                Icon = new Wpf.Ui.Controls.SymbolIcon { Symbol = icon, FontSize = 16 },
+            };
             item.Click += (_, _) => action();
             menu.Items.Add(item);
         }

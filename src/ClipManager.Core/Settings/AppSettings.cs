@@ -39,6 +39,27 @@ public sealed class AppSettings
         return index == 0 && trackCount > 1 ? "Spur 1 (Mix)" : $"Spur {index + 1}";
     }
 
+    /// <summary>Eigene Farben für Tonspuren (Index ab 0) als "#RRGGBB". Fehlt eine, gilt die Standardfarbe.</summary>
+    public Dictionary<int, string> TrackColors { get; set; } = new();
+
+    /// <summary>Farben zur Auswahl und als Standard (Spur 1 grau-blau für den Mix, dann bunt).</summary>
+    public static readonly IReadOnlyList<string> Palette = new[]
+    {
+        "#9AA5B8", "#FFB347", "#5AB0FF", "#8C7CFF", "#4CD07D", "#FF6FA8",
+        "#3DD6D0", "#F2D04B", "#FF7A59", "#A3E36B", "#E86BFF", "#6B8BFF",
+    };
+
+    /// <summary>Standardfarbe einer Spur, wenn keine eigene gesetzt ist.</summary>
+    public static string DefaultTrackColor(int index) => Palette[Math.Max(0, index) % Palette.Count];
+
+    /// <summary>Farbe einer Spur: eigene Farbe, sonst Standardfarbe.</summary>
+    public string TrackColor(int index) =>
+        TrackColors.TryGetValue(index, out var own) && IsHexColor(own) ? own : DefaultTrackColor(index);
+
+    /// <summary>Prüft auf "#RRGGBB".</summary>
+    public static bool IsHexColor(string? value) =>
+        value is { Length: 7 } && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit);
+
     /// <summary>Eigener Pfad zu ffmpeg.exe. Leer = automatisch suchen.</summary>
     public string? FfmpegPath { get; set; }
 
