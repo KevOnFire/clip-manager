@@ -59,6 +59,7 @@ public sealed class SettingsStore
             var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
             settings.ClipFolders ??= new();
             settings.TierLimitsMb ??= AppSettings.DefaultLimits();
+            settings.TrackNames ??= new();
             Migrate(settings, json);
             return settings;
         }

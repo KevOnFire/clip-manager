@@ -56,5 +56,15 @@ public class RealFfmpegTests
         var strip = await strips.GetOrCreateAsync(ffmpeg.Ffmpeg, clip, info.Duration);
         Assert.NotNull(strip);
         Assert.True(new FileInfo(strip!).Length > 1000);
+
+        // Tonspuren als WAV + Wellenform
+        var audio = new AudioTrackCache(Path.Combine(dir.Path, "audio"), runner);
+        var wavs = await audio.GetOrCreateAsync(ffmpeg.Ffmpeg, clip, info.AudioTracks.Count);
+        Assert.NotNull(wavs);
+        Assert.Equal(2, wavs!.Count);
+        Assert.All(wavs, w => Assert.True(File.Exists(w)));
+        var peaks = Waveform.ReadPeaks(wavs[0], 100);
+        Assert.Equal(100, peaks.Length);
+        Assert.True(peaks.Skip(5).Take(90).All(p => p > 0.05), "Sinuston sollte überall Ausschlag haben");
     }
 }

@@ -52,6 +52,18 @@ public class SettingsTests
     }
 
     [Fact]
+    public void TrackName_OwnNameThenFileTitleThenNumber()
+    {
+        var s = new AppSettings();
+        Assert.Equal("Spur 1 (Mix)", s.TrackName(0, null, 5));
+        Assert.Equal("Spur 1", s.TrackName(0, null, 1));
+        Assert.Equal("Spur 3", s.TrackName(2, "Track3", 5));
+        Assert.Equal("Discord", s.TrackName(3, "Discord", 5));
+        s.TrackNames[2] = "Mikro";
+        Assert.Equal("Mikro", s.TrackName(2, "Track3", 5));
+    }
+
+    [Fact]
     public void AddClipFolder_IgnoresDuplicates()
     {
         using var dir = new TempDir();

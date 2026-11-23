@@ -13,27 +13,37 @@ using Wpf.Ui.Controls;
 
 namespace ClipManager.Editor;
 
-/// <summary>Export-Dialog: Ziel wählen, exportieren, Ergebnis rausziehen/kopieren/speichern.</summary>
+/// <summary>
+/// Export-Dialog: Ziel wählen, exportieren, Ergebnis rausziehen/kopieren. Der Export liegt erst nur
+/// zwischengespeichert; gespeichert wird erst auf Wunsch (Original ersetzen, Kopie, Speichern unter).
+/// </summary>
 public partial class ExportWindow : FluentWindow
 {
     private static readonly CultureInfo German = CultureInfo.GetCultureInfo("de-DE");
 
     private readonly ClipFile _clip;
+    private readonly EditTimeline _timeline;
+    private readonly EditorWindow _editor;
     private readonly IReadOnlyList<TimeRange> _ranges;
+    private readonly IReadOnlyList<TrackEdit> _audio;
     private readonly TimeSpan _outputDuration;
+    private string? _savedPath;
     private MediaInfo? _info;
     private VideoEncoder _encoder = VideoEncoder.Cpu;
     private CancellationTokenSource? _cts;
     private string? _outputPath;
     private Point _dragStart;
 
-    public ExportWindow(ClipFile clip, MediaInfo? info, IReadOnlyList<TimeRange> ranges)
+    public ExportWindow(ClipFile clip, MediaInfo? info, EditTimeline timeline, bool saveMode, EditorWindow editor)
     {
         InitializeComponent();
         _clip = clip;
         _info = info;
-        _ranges = ranges;
-        _outputDuration = ranges.Aggregate(TimeSpan.Zero, (sum, r) => sum + r.Duration);
+        _timeline = timeline;
+        _editor = editor;
+        _ranges = timeline.KeptRanges;
+        _audio = timeline.AudibleTracks.ToList();
+        _outputDuration = _ranges.Aggregate(TimeSpan.Zero, (sum, r) => sum + r.Duration);
 
         var s = App.Settings;
         TargetCombo.ItemsSource = new[]
@@ -44,7 +54,12 @@ public partial class ExportWindow : FluentWindow
             new TargetItem(null, "Volle Qualität als Kopie (ohne Größenlimit)"),
         };
         TargetCombo.DisplayMemberPath = nameof(TargetItem.Label);
-        TargetCombo.SelectedIndex = (int)s.Tier;
+        TargetCombo.SelectedIndex = saveMode ? 3 : (int)s.Tier;
+        if (saveMode)
+        {
+            Title = "Speichern";
+            StartButton.Content = "Fertig machen";
+        }
 
         Loaded += async (_, _) => await PrepareAsync();
         Closing += (_, e) =>
@@ -55,6 +70,9 @@ public partial class ExportWindow : FluentWindow
             }
         };
     }
+
+    /// <summary>True, wenn das Original ersetzt wurde. Der Editor schließt sich dann.</summary>
+    public bool OriginalReplaced { get; private set; }
 
     private double? LimitMb => TargetCombo.SelectedItem is TargetItem { Tier: { } tier } ? App.Settings.LimitFor(tier) : null;
 
@@ -112,8 +130,9 @@ public partial class ExportWindow : FluentWindow
             VideoEncoder.Amd => "AMD-Grafikkarte",
             _ => "Prozessor (langsamer)",
         };
-        var tracks = ExportPlanner.DefaultAudioTracks(_info?.AudioTracks.Count ?? 1);
-        var trackText = tracks.Count == 0 ? "ohne Ton" : $"Ton: Spur {string.Join(", ", tracks.Select(t => t + 1))} gemischt";
+        var trackText = _audio.Count == 0
+            ? "ohne Ton"
+            : "Ton: " + string.Join(", ", _audio.Select(t => App.Settings.TrackName(t.Index, _info?.AudioTracks.ElementAtOrDefault(t.Index)?.Title, _timeline.Tracks.Count)));
         PlanDetailText.Text = $"{plan.Describe()} · {trackText} · Kodiert mit {encoder}";
 
         WarningText.Visibility = plan.TooLongWarning ? Visibility.Visible : Visibility.Collapsed;
@@ -132,9 +151,8 @@ public partial class ExportWindow : FluentWindow
         string output;
         try
         {
-            output = limit == null
-                ? ExportCommand.OutputPath(Path.GetDirectoryName(_clip.Path)!, _clip.Path, "Kopie")
-                : ExportCommand.OutputPath(App.ExportFolder, _clip.Path, "Discord");
+            Directory.CreateDirectory(App.ExportTempFolder);
+            output = ExportCommand.OutputPath(App.ExportTempFolder, _clip.Path, limit == null ? "Schnitt" : "Discord");
         }
         catch (Exception ex)
         {
@@ -156,7 +174,7 @@ public partial class ExportWindow : FluentWindow
             _clip.Path,
             output,
             _ranges,
-            ExportPlanner.DefaultAudioTracks(_info?.AudioTracks.Count ?? 1),
+            _audio,
             _info?.Height ?? 1080,
             _info?.Fps ?? 60,
             _encoder,
@@ -203,6 +221,10 @@ public partial class ExportWindow : FluentWindow
         DoneText.Text = result.Success
             ? $"{sizeText}{(limit is { } l ? $" (Limit {l:0} MB)" : string.Empty)} · {result.Plan?.Describe()}"
             : $"{sizeText}. {result.Error}";
+        if (limit != null)
+        {
+            DoneText.Text += " · Zum Speichern unten wählen, wohin.";
+        }
         FileNameText.Text = Path.GetFileName(_outputPath);
         DonePanel.Visibility = Visibility.Visible;
     }
@@ -256,7 +278,8 @@ public partial class ExportWindow : FluentWindow
 
         var dialog = new SaveFileDialog
         {
-            FileName = Path.GetFileName(_outputPath),
+            FileName = Path.GetFileNameWithoutExtension(_clip.Path) + ".mp4",
+            InitialDirectory = Directory.Exists(App.ExportFolder) ? App.ExportFolder : Path.GetDirectoryName(_clip.Path),
             Filter = "MP4-Video|*.mp4",
             DefaultExt = ".mp4",
         };
@@ -265,22 +288,124 @@ public partial class ExportWindow : FluentWindow
             return;
         }
 
+        if (string.Equals(Path.GetFullPath(dialog.FileName), Path.GetFullPath(_clip.Path), StringComparison.OrdinalIgnoreCase))
+        {
+            await Dialogs.ErrorAsync("Um das Original zu überschreiben, nimm bitte \"Original ersetzen\". Dann landet das alte im Papierkorb.");
+            return;
+        }
+
+        await SaveToAsync(dialog.FileName);
+    }
+
+    private async void SaveCopy_Click(object sender, RoutedEventArgs e)
+    {
+        if (_outputPath != null)
+        {
+            await SaveToAsync(ExportCommand.OutputPath(Path.GetDirectoryName(_clip.Path)!, _clip.Path, "Kopie"));
+        }
+    }
+
+    private async Task SaveToAsync(string target)
+    {
         try
         {
-            File.Copy(_outputPath, dialog.FileName, overwrite: true);
-            DoneText.Text = $"Gespeichert unter {dialog.FileName}";
+            await Task.Run(() => File.Copy(_outputPath!, target, overwrite: true));
+            _savedPath = target;
+            ShowInExplorerButton.Visibility = Visibility.Visible;
+            DoneText.Text = $"Gespeichert: {target}";
         }
         catch (Exception ex)
         {
+            Log.Error($"Speichern nach \"{target}\" fehlgeschlagen", ex);
             await Dialogs.ErrorAsync($"Speichern fehlgeschlagen: {ex.Message}");
+        }
+    }
+
+    private async void Replace_Click(object sender, RoutedEventArgs e)
+    {
+        if (_outputPath == null)
+        {
+            return;
+        }
+
+        var original = _clip.Path;
+        var target = Path.ChangeExtension(original, ".mp4");
+        if (!string.Equals(target, original, StringComparison.OrdinalIgnoreCase) && File.Exists(target))
+        {
+            await Dialogs.ErrorAsync($"Es gibt schon eine Datei \"{Path.GetFileName(target)}\". Nimm lieber \"Als Kopie speichern\".");
+            return;
+        }
+
+        var warning = LimitMb != null
+            ? "\n\nAchtung: Das ist die verkleinerte Discord-Version. Für volle Qualität im Editor auf \"Speichern\" gehen."
+            : string.Empty;
+        var ok = await Dialogs.ConfirmAsync(
+            "Original ersetzen?",
+            $"Das Original kommt in den Papierkorb (dort kannst du es zurückholen) und der geschnittene Clip nimmt seinen Platz ein.{warning}",
+            "Ersetzen");
+        if (!ok)
+        {
+            return;
+        }
+
+        // Der Editor muss die Datei loslassen, sonst kann Windows sie nicht verschieben.
+        _editor.ReleaseClip();
+        try
+        {
+            await MoveToRecycleBinWithRetryAsync(original);
+            await Task.Run(() => File.Copy(_outputPath, target, overwrite: false));
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Ersetzen von \"{original}\" fehlgeschlagen", ex);
+            await Dialogs.ErrorAsync($"Ersetzen hat nicht geklappt: {ex.Message}\n\nFalls das Original schon im Papierkorb ist, kannst du es dort wiederherstellen. Der neue Clip liegt noch hier: {_outputPath}");
+            OriginalReplaced = true;
+            Close();
+            return;
+        }
+
+        try
+        {
+            // Die Schnitte sind jetzt im Clip drin, also nichts mehr gespeichert lassen.
+            App.Db.SaveEdit(original, null);
+            if (!string.Equals(target, original, StringComparison.OrdinalIgnoreCase))
+            {
+                App.Db.MovePath(original, target);
+            }
+
+            EditorWindow.NotifyEditsChanged(original);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Datenbank nach dem Ersetzen nicht aktualisiert", ex);
+        }
+
+        OriginalReplaced = true;
+        Close();
+    }
+
+    private static async Task MoveToRecycleBinWithRetryAsync(string path)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                ShellFiles.MoveToRecycleBin(path);
+                return;
+            }
+            catch (IOException) when (attempt < 8)
+            {
+                // Der Player braucht manchmal einen Moment, bis die Datei wirklich frei ist.
+                await Task.Delay(400);
+            }
         }
     }
 
     private void ShowInExplorer_Click(object sender, RoutedEventArgs e)
     {
-        if (_outputPath != null)
+        if ((_savedPath ?? _outputPath) is { } path)
         {
-            ShellFiles.ShowInExplorer(_outputPath);
+            ShellFiles.ShowInExplorer(path);
         }
     }
 

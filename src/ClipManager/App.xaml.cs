@@ -18,6 +18,11 @@ public partial class App : Application
 
     public static FilmstripCache Filmstrips { get; private set; } = null!;
 
+    public static AudioTrackCache AudioTracks { get; private set; } = null!;
+
+    /// <summary>Hier landen Exporte, bis man sie speichert (Reinziehen/Kopieren braucht keine zweite Datei).</summary>
+    public static string ExportTempFolder => Path.Combine(Path.GetTempPath(), "ClipManager", "Export");
+
     public static IProcessRunner ProcessRunner { get; } = new ProcessRunner();
 
     public static AppSettings Settings { get; private set; } = null!;
@@ -77,6 +82,8 @@ public partial class App : Application
 
         Thumbnails = new ThumbnailCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
         Filmstrips = new FilmstripCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
+        AudioTracks = new AudioTrackCache(Path.Combine(localDir, "audio"), ProcessRunner);
+        CleanupExportTemp();
 
         var ffmpeg = LocateFfmpeg();
         Log.Info(ffmpeg == null ? "FFmpeg nicht gefunden" : $"FFmpeg: {ffmpeg.Ffmpeg}, ffprobe: {ffmpeg.Ffprobe ?? "fehlt"}");
@@ -84,6 +91,30 @@ public partial class App : Application
         var window = new MainWindow();
         MainWindow = window;
         window.Show();
+    }
+
+    /// <summary>Alte Zwischen-Exporte wegräumen (älter als 2 Tage, z.B. nur in Discord gezogen).</summary>
+    private static void CleanupExportTemp()
+    {
+        try
+        {
+            if (!Directory.Exists(ExportTempFolder))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(ExportTempFolder))
+            {
+                if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) > TimeSpan.FromDays(2))
+                {
+                    File.Delete(file);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Error("Alte Exporte konnten nicht aufgeräumt werden", ex);
+        }
     }
 
     private static void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

@@ -16,6 +16,16 @@ public sealed class TimelineControl : FrameworkElement
     private const double StripTop = 6;
     private const double StripHeight = 64;
     private const double RulerHeight = 18;
+
+    /// <summary>Wo die Spur-Zeilen anfangen und wie hoch jede ist (der Editor richtet die Spur-Köpfe danach aus).</summary>
+    public const double LanesTop = 6 + 64 + 18 + 4;
+    public const double LaneHeight = 34;
+
+    private static readonly Brush LaneBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2E)));
+    private static readonly Brush WaveBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x5A, 0xB0, 0xFF)));
+    private static readonly Brush WaveOffBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x5A)));
+    private static readonly Brush LaneMutedBrush = Frozen(new SolidColorBrush(Color.FromArgb(0xC0, 0x30, 0x10, 0x14)));
+    private static readonly Pen LaneMutedPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xE8, 0x40, 0x4C)), 1.5));
     private const double HandleWidth = 10;
     private const double GrabDistance = 9;
 
@@ -40,10 +50,12 @@ public sealed class TimelineControl : FrameworkElement
     private TimeSpan _position;
     private DragMode _drag;
     private TimeSpan _dragValue;
+    private IReadOnlyList<float[]?>? _peaks;
+    private readonly Dictionary<int, (double Width, Geometry Geometry)> _waveCache = new();
 
     public TimelineControl()
     {
-        Height = StripTop + StripHeight + RulerHeight;
+        Height = LanesTop;
         Focusable = false;
         ClipToBounds = true;
     }
@@ -78,9 +90,27 @@ public sealed class TimelineControl : FrameworkElement
                 _timeline.Changed += OnTimelineChanged;
             }
 
+            UpdateHeight();
             InvalidateVisual();
         }
     }
+
+    /// <summary>Klick in eine Spur-Zeile: Spur-Index und Zeitpunkt (zum Stummschalten des Teils).</summary>
+    public event EventHandler<(int Track, TimeSpan Time)>? TrackLaneClicked;
+
+    /// <summary>Lautstärke-Spitzen pro Spur (0..1) für die Wellenform.</summary>
+    public IReadOnlyList<float[]?>? Peaks
+    {
+        get => _peaks;
+        set
+        {
+            _peaks = value;
+            _waveCache.Clear();
+            InvalidateVisual();
+        }
+    }
+
+    private int TrackCount => _timeline?.Tracks.Count ?? 0;
 
     public ImageSource? Filmstrip
     {
@@ -170,10 +200,16 @@ public sealed class TimelineControl : FrameworkElement
         DrawHandle(dc, inX, isIn: true);
         DrawHandle(dc, outX, isIn: false);
         DrawRuler(dc, tl.Duration, width);
+        DrawLanes(dc, tl, strip, inX, outX);
 
         // Abspielkopf: nur innerhalb des Filmstreifens, nicht darüber
         var px = X(_position);
+        var playheadBottom = TrackCount > 0 ? LanesTop + TrackCount * LaneHeight - 4 : StripTop + StripHeight;
         dc.DrawLine(PlayheadPen, new Point(px, StripTop), new Point(px, StripTop + StripHeight));
+        if (TrackCount > 0)
+        {
+            dc.DrawLine(PlayheadPen, new Point(px, LanesTop), new Point(px, playheadBottom));
+        }
         var head = new StreamGeometry();
         using (var g = head.Open())
         {
@@ -200,7 +236,15 @@ public sealed class TimelineControl : FrameworkElement
             return;
         }
 
-        var x = e.GetPosition(this).X;
+        var point = e.GetPosition(this);
+        var x = point.X;
+        if (LaneAt(point.Y) is { } lane)
+        {
+            TrackLaneClicked?.Invoke(this, (lane, TimeAt(x)));
+            e.Handled = true;
+            return;
+        }
+
         _drag = HitTest(x);
         _dragValue = TimeAt(x);
         CaptureMouse();
@@ -228,7 +272,7 @@ public sealed class TimelineControl : FrameworkElement
         var x = e.GetPosition(this).X;
         if (_drag == DragMode.None)
         {
-            Cursor = HitTest(x) == DragMode.Playhead ? Cursors.Hand : Cursors.SizeWE;
+            Cursor = LaneAt(e.GetPosition(this).Y) != null || HitTest(x) == DragMode.Playhead ? Cursors.Hand : Cursors.SizeWE;
             return;
         }
 
@@ -359,7 +403,147 @@ public sealed class TimelineControl : FrameworkElement
         return TimeSpan.FromSeconds(ratio * tl.Duration.TotalSeconds);
     }
 
-    private void OnTimelineChanged(object? sender, EventArgs e) => InvalidateVisual();
+    private void OnTimelineChanged(object? sender, EventArgs e)
+    {
+        UpdateHeight();
+        InvalidateVisual();
+    }
+
+    private void UpdateHeight()
+    {
+        var height = TrackCount > 0 ? LanesTop + TrackCount * LaneHeight : LanesTop;
+        if (Math.Abs(Height - height) > 0.5)
+        {
+            Height = height;
+        }
+    }
+
+    private int? LaneAt(double y)
+    {
+        if (TrackCount == 0 || y < LanesTop)
+        {
+            return null;
+        }
+
+        var lane = (int)((y - LanesTop) / LaneHeight);
+        return lane < TrackCount ? lane : null;
+    }
+
+    /// <summary>Spur-Zeilen: Wellenform, stumme Stellen, abgedunkelt was nicht im Export ist.</summary>
+    private void DrawLanes(DrawingContext dc, EditTimeline tl, Rect strip, double inX, double outX)
+    {
+        for (var i = 0; i < tl.Tracks.Count; i++)
+        {
+            var track = tl.Tracks[i];
+            var lane = new Rect(strip.Left, LanesTop + i * LaneHeight, strip.Width, LaneHeight - 4);
+            dc.DrawRoundedRectangle(LaneBrush, null, lane, 4, 4);
+
+            if (WaveGeometry(i, strip.Width) is { } wave)
+            {
+                dc.PushTransform(new TranslateTransform(lane.Left, lane.Top + lane.Height / 2));
+                dc.PushTransform(new ScaleTransform(1, lane.Height / 2 - 2));
+                dc.DrawGeometry(track.Enabled ? WaveBrush : WaveOffBrush, null, wave);
+                dc.Pop();
+                dc.Pop();
+            }
+
+            if (track.Enabled)
+            {
+                foreach (var muted in track.Muted)
+                {
+                    var start = Math.Max(X(muted.Start), strip.Left);
+                    var end = Math.Min(X(muted.End), strip.Right);
+                    if (end <= start)
+                    {
+                        continue;
+                    }
+
+                    var rect = new Rect(start, lane.Top, end - start, lane.Height);
+                    dc.DrawRectangle(LaneMutedBrush, null, rect);
+                    dc.DrawLine(LaneMutedPen, new Point(start, lane.Top + lane.Height / 2), new Point(end, lane.Top + lane.Height / 2));
+                }
+            }
+            else
+            {
+                dc.DrawRoundedRectangle(OutsideBrush, null, lane, 4, 4);
+            }
+
+            // Was nicht im Export landet, wie oben abdunkeln
+            if (inX > strip.Left)
+            {
+                dc.DrawRectangle(OutsideBrush, null, new Rect(strip.Left, lane.Top, inX - strip.Left, lane.Height));
+            }
+
+            if (outX < strip.Right)
+            {
+                dc.DrawRectangle(OutsideBrush, null, new Rect(outX, lane.Top, strip.Right - outX, lane.Height));
+            }
+
+            foreach (var segment in tl.Segments.Where(s => s.Removed))
+            {
+                var start = Math.Max(X(segment.Start), inX);
+                var end = Math.Min(X(segment.End), outX);
+                if (end > start)
+                {
+                    dc.DrawRectangle(OutsideBrush, null, new Rect(start, lane.Top, end - start, lane.Height));
+                }
+            }
+
+            foreach (var split in tl.VisibleSplits)
+            {
+                var x = X(split);
+                dc.DrawLine(TickPen, new Point(x, lane.Top), new Point(x, lane.Bottom));
+            }
+        }
+    }
+
+    /// <summary>Wellenform als Fläche, 0..width breit und -1..1 hoch. Wird pro Breite zwischengespeichert.</summary>
+    private Geometry? WaveGeometry(int track, double width)
+    {
+        if (_peaks == null || track >= _peaks.Count || _peaks[track] is not { Length: > 0 } peaks || width < 2)
+        {
+            return null;
+        }
+
+        if (_waveCache.TryGetValue(track, out var cached) && Math.Abs(cached.Width - width) < 0.5)
+        {
+            return cached.Geometry;
+        }
+
+        var columns = (int)width;
+        var values = new double[columns];
+        for (var x = 0; x < columns; x++)
+        {
+            var from = (int)((long)x * peaks.Length / columns);
+            var to = Math.Max(from + 1, (int)((long)(x + 1) * peaks.Length / columns));
+            float max = 0;
+            for (var b = from; b < to && b < peaks.Length; b++)
+            {
+                max = Math.Max(max, peaks[b]);
+            }
+
+            values[x] = Math.Max(0.02, Math.Min(1, max));
+        }
+
+        var geometry = new StreamGeometry();
+        using (var g = geometry.Open())
+        {
+            g.BeginFigure(new Point(0, -values[0]), true, true);
+            for (var x = 1; x < columns; x++)
+            {
+                g.LineTo(new Point(x, -values[x]), false, false);
+            }
+
+            for (var x = columns - 1; x >= 0; x--)
+            {
+                g.LineTo(new Point(x, values[x]), false, false);
+            }
+        }
+
+        geometry.Freeze();
+        _waveCache[track] = (width, geometry);
+        return geometry;
+    }
 
     private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
 

@@ -6,7 +6,7 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Clip bearbeiten"
     Width="1200"
-    Height="820"
+    Height="920"
     MinWidth="820"
     MinHeight="560"
     ExtendsContentIntoTitleBar="True"
@@ -106,14 +106,80 @@
                 IsChecked="True" />
         </DockPanel>
 
-        <!-- Zeitleiste -->
-        <Border
-            Grid.Row="3"
-            Margin="16,0,16,8"
-            CornerRadius="6"
-            ClipToBounds="True">
-            <editor:TimelineControl x:Name="TimelineView" />
-        </Border>
+        <!-- Zeitleiste, darunter eine Zeile pro Tonspur (links die Spur-Köpfe) -->
+        <Grid Grid.Row="3" Margin="16,0,16,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                <TextBlock
+                    x:Name="TracksHint"
+                    Height="92"
+                    Padding="0,6,0,0"
+                    FontSize="12"
+                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                    Text="Tonspuren werden geladen …"
+                    TextWrapping="Wrap" />
+                <ItemsControl x:Name="TrackHeaders">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type editor:TrackRowViewModel}">
+                            <Border
+                                Height="30"
+                                Margin="0,0,0,4"
+                                Padding="6,0"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                CornerRadius="4">
+                                <DockPanel VerticalAlignment="Center">
+                                    <CheckBox
+                                        MinWidth="0"
+                                        Margin="0,0,4,0"
+                                        Padding="4,0,0,0"
+                                        VerticalAlignment="Center"
+                                        DockPanel.Dock="Left"
+                                        Focusable="False"
+                                        IsChecked="{Binding Enabled}"
+                                        ToolTip="Spur an/aus" />
+                                    <TextBlock
+                                        Width="36"
+                                        VerticalAlignment="Center"
+                                        DockPanel.Dock="Right"
+                                        FontSize="11"
+                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                        Text="{Binding VolumeText}"
+                                        TextAlignment="Right" />
+                                    <Slider
+                                        Width="70"
+                                        VerticalAlignment="Center"
+                                        DockPanel.Dock="Right"
+                                        Focusable="False"
+                                        Maximum="2"
+                                        Minimum="0"
+                                        Thumb.DragStarted="TrackVolume_DragStarted"
+                                        ToolTip="Lautstärke dieser Spur"
+                                        Value="{Binding Volume}" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        MouseLeftButtonDown="TrackName_MouseLeftButtonDown"
+                                        Text="{Binding Name}"
+                                        TextTrimming="CharacterEllipsis"
+                                        ToolTip="Doppelklick zum Umbenennen" />
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <Border
+                Grid.Column="1"
+                VerticalAlignment="Top"
+                CornerRadius="6"
+                ClipToBounds="True">
+                <editor:TimelineControl x:Name="TimelineView" />
+            </Border>
+        </Grid>
 
         <!-- Werkzeuge -->
         <WrapPanel Grid.Row="4" Margin="16,0,16,4">
@@ -157,6 +223,14 @@
 
         <DockPanel Grid.Row="5" Margin="16,0,16,14">
             <ui:Button
+                x:Name="SaveButton"
+                Margin="8,0,0,0"
+                Click="Save_Click"
+                Content="Speichern"
+                DockPanel.Dock="Right"
+                Icon="{ui:SymbolIcon Save24}"
+                ToolTip="Geschnittenen Clip in voller Qualität speichern: Original ersetzen, Kopie oder woanders hin" />
+            <ui:Button
                 x:Name="ExportButton"
                 Appearance="Primary"
                 Content="Exportieren"
@@ -168,7 +242,7 @@
                 VerticalAlignment="Center"
                 FontSize="12"
                 Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                Text="Leertaste: Abspielen · ← →: 1 s (mit Umschalt 5 s) · , .: einzelnes Bild · Pos1/Ende: zu Anfang/Ende · Der Originalclip wird nie verändert, Schnitte werden automatisch gespeichert."
+                Text="Leertaste: Abspielen · ← →: 1 s (mit Umschalt 5 s) · , .: einzelnes Bild · Pos1/Ende: zu Anfang/Ende · Klick in eine Spur: diesen Teil stumm (Teile entstehen durch S) · Schnitte werden automatisch gemerkt, das Original bleibt, bis du es beim Speichern ersetzt."
                 TextWrapping="Wrap" />
         </DockPanel>
     </Grid>

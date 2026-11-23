@@ -29,23 +29,23 @@ Aufnehmen macht OBS (Replay-Puffer), nicht dieses Programm.
 | Video/Audio | FFmpeg + ffprobe als externe Programme (Ordner `ffmpeg/` neben der exe) | Schnell, jedes Format, GPU-Encoder |
 | GPU | NVIDIA NVENC und AMD AMF, Fallback CPU (libx264) | Kev hat NVIDIA |
 | Daten | SQLite (`Microsoft.Data.Sqlite`) für Favoriten und Clip-Infos, JSON für Einstellungen | |
-| Originale | Werden **nie** verändert. Schnitte werden gespeichert, Export erzeugt neue Datei | Sicherheit |
+| Originale | Werden nur auf ausdrücklichen Wunsch ersetzt ("Original ersetzen" im Export-/Speichern-Dialog, altes Original → Papierkorb). Sonst: Schnitte werden nur gemerkt, Export erzeugt neue Datei | Sicherheit; Kev wollte Ersetzen/Kopie/Speichern unter (23.11.2026) |
 | Discord-Limits | Stufen Ohne Nitro / Nitro Basic / Nitro, Standard 20 / 50 / 500 MB, in den Einstellungen änderbar | Kev hat 20 MB ohne Nitro bestätigt (23.11.2026). Alte Einstellungen mit 10 MB werden beim Start auf 20 umgestellt (`SettingsStore.Migrate`) |
 | Export-Format | H.264 + AAC in MP4 | Spielt in Discord überall direkt ab |
+| Export-Ablage | Export landet erst in `%TEMP%\ClipManager\Export` (für Reinziehen/Kopieren), wird erst per Knopf gespeichert | Kev wollte keine doppelten Dateien |
 | Updates | GitHub Releases, Update-Knopf im Programm | Kev soll nichts manuell runterladen |
-| Vorschau im Editor | Vorerst WPF `MediaElement` (Windows Media Foundation, keine Zusatz-DLLs) | Reicht für H.264-MP4 aus OBS, spielt aber nur die erste Tonspur (Spur 1 = Mix). Für Etappe 5 (Einzelspuren hören) Video stumm + NAudio, oder Wechsel auf LibVLC/mpv |
+| Vorschau im Editor | Bild: WPF `MediaElement` (stumm). Ton: Spuren per FFmpeg als WAV in den Cache, mit NAudio gemischt (`TrackPlayer`), Video ist der Takt, Ton wird bei >120 ms Abweichung nachgezogen | Hört genau, was exportiert wird. Bis die WAVs fertig sind, spielt MediaElement Spur 1 |
 
-Geplant, aber noch nicht umgesetzt: NAudio zum Mischen der Spuren in der Vorschau (Etappe 5),
-ggf. LibVLC/mpv, falls MediaElement bei manchen Formaten (MKV, HEVC) nicht reicht.
+Falls MediaElement bei manchen Formaten (MKV, HEVC) nicht reicht: LibVLC/mpv nur fürs Bild.
 
 ## Aufbau
 
 ```
 src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linux, hat Tests)
   Settings/               AppSettings, SettingsStore (JSON), DiscordTier
-  Editing/                EditTimeline (Anfang/Ende, Schnitte, entfernte Teile, Rückgängig), ClipEditState (JSON), TimeText
+  Editing/                EditTimeline (Anfang/Ende, Schnitte, entfernte Teile, Spuren, Rückgängig), TrackEdit, RangeSet, ClipEditState (JSON), TimeText
   Library/                ClipScanner, ClipFile, LibraryDb (SQLite), LibraryQuery (Filter/Sort/Seiten), ClipFileOps (Kopie/Umbenennen)
-  Media/                  FfmpegLocator, FfmpegProbe (Version + GPU-Test), MediaInfo (ffprobe), ThumbnailCache, FilmstripCache (Zeitleiste), ProcessRunner
+  Media/                  FfmpegLocator, FfmpegProbe (Version + GPU-Test), MediaInfo (ffprobe), ThumbnailCache, FilmstripCache (Zeitleiste), AudioTrackCache + Waveform (Spuren als WAV), ProcessRunner
   Export/                 ExportPlanner (Bitrate/Auflösung aus Limit), ExportCommand (FFmpeg-Filtergraph), Exporter (Lauf, Fortschritt, Größen-Check + Wiederholung)
   Updates/                UpdateChecker (GitHub-API), UpdateScript (cmd zum Ersetzen + Neustart)
 src/ClipManager/          WPF-Oberfläche (net8.0-windows)
@@ -54,7 +54,9 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   Views/LibraryView       Kacheln, Seiten, Filter, Menü, Ordner-Überwachung, Klick öffnet Editor
   Editor/EditorWindow     Editor-Fenster: Player, Tastenkürzel, speichert Schnitte automatisch in der DB
   Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf)
-  Editor/ExportWindow     Export-Dialog: Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Speichern unter
+  Editor/ExportWindow     Export-/Speichern-Dialog: Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Original ersetzen / Kopie / Speichern unter
+  Editor/TrackPlayer      NAudio: Spuren gemischt abspielen (an/aus, Lautstärke, stumme Stellen)
+  Editor/TrackRowViewModel  Spur-Kopf (Name, Haken, Lautstärke); Namen global in settings.json (TrackNames)
   Views/SettingsView      Ordner, Discord, Export-Ordner, Updates, FFmpeg/GPU
   AppUpdater, ShellFiles, Dialogs, FolderPicker
 tests/ClipManager.Core.Tests/   xUnit-Tests für Core
@@ -88,6 +90,8 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | Einstellungen | `%AppData%\ClipManager\settings.json` |
 | Favoriten, Clip-Infos, Schnitte (Tabelle `edits`) | `%AppData%\ClipManager\library.db` |
 | Vorschaubilder, Filmstreifen | `%LocalAppData%\ClipManager\thumbs\` |
+| Tonspuren als WAV (Cache, 3 Tage) | `%LocalAppData%\ClipManager\audio\` |
+| Zwischen-Exporte (2 Tage) | `%TEMP%\ClipManager\Export\` |
 | Fehler-Log | `%LocalAppData%\ClipManager\log.txt` |
 | Exporte (Standard) | `Videos\Clip Manager Exporte` |
 
@@ -106,8 +110,8 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | 2 | Bibliothek: Kacheln, Vorschaubilder, Dauer, Favoriten, Seiten, Suche/Sortierung, Umbenennen/Kopie/Löschen, Ordner-Überwachung | fertig (PR #2) |
 | – | Update-Knopf, Releases, diese Übergabe-Datei | fertig (in PR #2) |
 | 3 | Editor Teil 1: Player, Zeitleiste mit Vorschaubildern, Anfang/Ende kürzen, Stellen in der Mitte rausschneiden, Tastenkürzel | fertig (PR #4, Fixes in PR #5) |
-| 4 | Export: Discord-Stufen, Bitrate-Rechnung, GPU-Encoder, Fortschritt, fertigen Clip per Drag-and-Drop aus dem Programm ziehen, "Speichern unter" | in PR #6 (Klicktest offen) |
-| 5 | Editor Teil 2: Audiospuren einzeln (Lautstärke, stumm, stumme Bereiche), Vorschau hört genau, was exportiert wird | offen |
+| 4 | Export: Discord-Stufen, Bitrate-Rechnung, GPU-Encoder, Fortschritt, fertigen Clip per Drag-and-Drop aus dem Programm ziehen, "Speichern unter" | fertig (PR #6, #7) |
+| 5 | Editor Teil 2: Audiospuren einzeln (Lautstärke, stumm, stumme Bereiche), Vorschau hört genau, was exportiert wird; Speichern (ersetzen/Kopie) | in PR #8 (Klicktest offen) |
 | 6 | Feinschliff: Hover-Vorschau auf Kacheln, Design, Fehlerfälle | offen |
 | 7 | Für andere: Installer, Ersteinrichtung, ggf. Code-Signatur | offen |
 

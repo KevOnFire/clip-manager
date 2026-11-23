@@ -12,9 +12,10 @@ using Wpf.Ui.Controls;
 namespace ClipManager.Editor;
 
 /// <summary>
-/// Editor für einen Clip: Vorschau, Zeitleiste, Anfang/Ende, Stellen rausschneiden.
-/// Die Vorschau nutzt vorerst den eingebauten Windows-Player (MediaElement) und spielt Spur 1 (den Mix).
-/// Einzelne Spuren hören kommt in Etappe 5.
+/// Editor für einen Clip: Vorschau, Zeitleiste, Anfang/Ende, Stellen rausschneiden, Tonspuren einzeln.
+/// Das Bild kommt vom Windows-Player (MediaElement, stumm). Der Ton kommt aus den einzeln
+/// herausgeholten Spuren (TrackPlayer), gemischt wie beim Export. Bis die Spuren bereit sind
+/// (oder falls das nicht klappt), spielt der Windows-Player Spur 1 ab.
 /// </summary>
 public partial class EditorWindow : FluentWindow
 {
@@ -22,7 +23,10 @@ public partial class EditorWindow : FluentWindow
 
     private readonly ClipFile _clip;
     private readonly TimeSpan? _knownDuration;
-    private readonly MediaInfo? _info;
+    private MediaInfo? _info;
+    private TrackPlayer? _audio;
+    private List<TrackRowViewModel> _trackRows = new();
+    private DateTime _lastAudioSync = DateTime.MinValue;
     private readonly DispatcherTimer _timer;
     private EditTimeline? _timeline;
     private bool _playing;
@@ -51,6 +55,7 @@ public partial class EditorWindow : FluentWindow
 
         TimelineView.SeekRequested += (_, t) => ScrubTo(t);
         TimelineView.ScrubbingChanged += Timeline_ScrubbingChanged;
+        TimelineView.TrackLaneClicked += (_, e) => _timeline?.ToggleTrackMuteAt(e.Track, e.Time);
 
         Player.Volume = VolumeSlider.Value;
 
@@ -90,7 +95,10 @@ public partial class EditorWindow : FluentWindow
 
     private TimeSpan Position => Player.Position;
 
-    private void Player_MediaOpened(object sender, RoutedEventArgs e)
+    /// <summary>Ton kommt aus den einzelnen Spuren (sonst aus dem Windows-Player).</summary>
+    private bool UsesTrackAudio => _audio != null;
+
+    private async void Player_MediaOpened(object sender, RoutedEventArgs e)
     {
         LoadingText.Visibility = Visibility.Collapsed;
         var duration = Player.NaturalDuration.HasTimeSpan ? Player.NaturalDuration.TimeSpan : _knownDuration ?? TimeSpan.Zero;
@@ -101,6 +109,21 @@ public partial class EditorWindow : FluentWindow
         }
 
         _timeline = new EditTimeline(duration);
+        var ffmpeg = App.LocateFfmpeg();
+        if (_info == null && ffmpeg?.Ffprobe != null)
+        {
+            try
+            {
+                _info = await new MediaInfoReader(App.ProcessRunner).ReadAsync(ffmpeg.Ffprobe, _clip.Path);
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Clip-Infos für \"{_clip.Path}\" konnten nicht gelesen werden", ex);
+            }
+        }
+
+        var trackCount = _info?.AudioTracks.Count ?? 0;
+        _timeline.InitTracks(trackCount, Core.Export.ExportPlanner.DefaultAudioTracks(trackCount));
         try
         {
             if (App.Db.GetEdit(_clip.Path) is { } saved)
@@ -122,6 +145,75 @@ public partial class EditorWindow : FluentWindow
         SetPlaying(true);
         Seek(_timeline.In);
         _ = LoadFilmstripAsync(duration);
+        BuildTrackRows();
+        _ = LoadTrackAudioAsync();
+    }
+
+    private void BuildTrackRows()
+    {
+        if (_timeline == null)
+        {
+            return;
+        }
+
+        var count = _timeline.Tracks.Count;
+        _trackRows = Enumerable.Range(0, count)
+            .Select(i => new TrackRowViewModel(_timeline, i, App.Settings.TrackName(i, _info?.AudioTracks.ElementAtOrDefault(i)?.Title, count)))
+            .ToList();
+        TrackHeaders.ItemsSource = _trackRows;
+        TracksHint.Text = count switch
+        {
+            0 => "Dieser Clip hat keinen Ton.",
+            1 => "Tonspur",
+            _ => "Tonspuren · Haken = im Export · Klick in eine Spur macht den Teil stumm",
+        };
+    }
+
+    /// <summary>Spuren als WAV holen, Wellenformen berechnen, Spuren-Vorschau starten.</summary>
+    private async Task LoadTrackAudioAsync()
+    {
+        var ffmpeg = App.LocateFfmpeg();
+        if (ffmpeg == null || _timeline == null || _timeline.Tracks.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var timeline = _timeline;
+            var wavs = await App.AudioTracks.GetOrCreateAsync(ffmpeg.Ffmpeg, _clip, timeline.Tracks.Count);
+            if (wavs == null || !IsLoaded)
+            {
+                return;
+            }
+
+            var peaks = await Task.Run(() => wavs.Select(w => (float[]?)Waveform.ReadPeaks(w, 4000)).ToList());
+            if (!IsLoaded)
+            {
+                return;
+            }
+
+            TimelineView.Peaks = peaks;
+            var audio = TrackPlayer.TryCreate(wavs, timeline);
+            if (audio == null)
+            {
+                return;
+            }
+
+            audio.Volume = (float)VolumeSlider.Value;
+            _audio = audio;
+
+            // Ab jetzt kommt der Ton aus den Spuren, der Windows-Player bleibt stumm.
+            Player.IsMuted = true;
+            if (_playing)
+            {
+                _audio.Play(Position);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Tonspuren-Vorschau für \"{_clip.Path}\" fehlgeschlagen", ex);
+        }
     }
 
     private async Task LoadFilmstripAsync(TimeSpan duration)
@@ -218,6 +310,19 @@ public partial class EditorWindow : FluentWindow
                 StopAtEnd();
                 return;
             }
+
+            // Ton der Spuren am Bild ausrichten, wenn sie auseinanderlaufen.
+            if (_audio != null && DateTime.UtcNow - _lastAudioSync > TimeSpan.FromMilliseconds(700)
+                && DateTime.UtcNow - _lastSeekAt > TimeSpan.FromMilliseconds(400))
+            {
+                var drift = (_audio.Position - pos).Duration();
+                if (drift > TimeSpan.FromMilliseconds(120))
+                {
+                    _audio.Play(pos);
+                }
+
+                _lastAudioSync = DateTime.UtcNow;
+            }
         }
 
         TimelineView.Position = pos;
@@ -238,13 +343,16 @@ public partial class EditorWindow : FluentWindow
         _playing = playing;
         if (playing)
         {
-            Player.IsMuted = false;
+            Player.IsMuted = UsesTrackAudio;
             Player.Play();
+            _audio?.Play(Position);
+            _lastAudioSync = DateTime.UtcNow;
         }
         else
         {
             Player.Pause();
             Player.IsMuted = true;
+            _audio?.Stop();
         }
 
         PlayButton.Icon = new SymbolIcon { Symbol = playing ? SymbolRegular.Pause24 : SymbolRegular.Play24, Filled = true };
@@ -280,6 +388,11 @@ public partial class EditorWindow : FluentWindow
         Player.Position = t;
         TimelineView.Position = t;
         UpdatePositionText(t);
+        if (_playing && _audio != null)
+        {
+            _audio.Play(t);
+            _lastAudioSync = DateTime.UtcNow;
+        }
     }
 
     /// <summary>Springen beim Ziehen auf der Zeitleiste: Anzeige sofort, Player gebremst (siehe Timer).</summary>
@@ -328,6 +441,11 @@ public partial class EditorWindow : FluentWindow
 
     private void Timeline_Changed(object? sender, EventArgs e)
     {
+        foreach (var row in _trackRows)
+        {
+            row.SyncFromTimeline();
+        }
+
         UpdateTexts();
         SaveEdits();
     }
@@ -443,6 +561,11 @@ public partial class EditorWindow : FluentWindow
         {
             Player.Volume = e.NewValue;
         }
+
+        if (_audio != null)
+        {
+            _audio.Volume = (float)e.NewValue;
+        }
     }
 
     private void SetIn_Click(object sender, RoutedEventArgs e) => _timeline?.SetIn(Position);
@@ -457,7 +580,46 @@ public partial class EditorWindow : FluentWindow
 
     private void Reset_Click(object sender, RoutedEventArgs e) => _timeline?.Reset();
 
-    private void Export_Click(object sender, RoutedEventArgs e)
+    private void Export_Click(object sender, RoutedEventArgs e) => OpenExport(saveMode: false);
+
+    private void TrackVolume_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) =>
+        _timeline?.BeginTrackVolumeChange();
+
+    private async void TrackName_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2 || (sender as FrameworkElement)?.DataContext is not TrackRowViewModel row)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        var name = await Dialogs.PromptAsync(
+            "Spur umbenennen",
+            $"Name für Spur {row.Index + 1} (gilt für alle Clips):",
+            row.Name,
+            "Speichern");
+        if (name == null)
+        {
+            return;
+        }
+
+        name = name.Trim();
+        if (name.Length == 0)
+        {
+            App.Settings.TrackNames.Remove(row.Index);
+        }
+        else
+        {
+            App.Settings.TrackNames[row.Index] = name;
+        }
+
+        App.SaveSettings();
+        row.Name = App.Settings.TrackName(row.Index, _info?.AudioTracks.ElementAtOrDefault(row.Index)?.Title, _trackRows.Count);
+    }
+
+    private void Save_Click(object sender, RoutedEventArgs e) => OpenExport(saveMode: true);
+
+    private void OpenExport(bool saveMode)
     {
         if (_timeline == null)
         {
@@ -465,13 +627,38 @@ public partial class EditorWindow : FluentWindow
         }
 
         SetPlaying(false);
-        new ExportWindow(_clip, _info, _timeline.KeptRanges) { Owner = this }.ShowDialog();
+        var dialog = new ExportWindow(_clip, _info, _timeline, saveMode, this) { Owner = this };
+        dialog.ShowDialog();
+        if (dialog.OriginalReplaced)
+        {
+            Close();
+        }
     }
+
+    /// <summary>
+    /// Gibt die Datei frei (zum Ersetzen des Originals). Danach ist der Editor nicht mehr nutzbar;
+    /// er wird nach dem Export-Dialog geschlossen.
+    /// </summary>
+    public void ReleaseClip()
+    {
+        _timer.Stop();
+        _timeline!.Changed -= Timeline_Changed;
+        _audio?.Dispose();
+        _audio = null;
+        Player.Stop();
+        Player.Close();
+        Player.Source = null;
+    }
+
+    /// <summary>Kacheln aktualisieren, nachdem sich gespeicherte Schnitte geändert haben.</summary>
+    public static void NotifyEditsChanged(string path) => EditsSaved?.Invoke(null, path);
 
     private void OnClosed(object? sender, EventArgs e)
     {
         OpenWindows.Remove(_clip.Path);
         _timer.Stop();
+        _audio?.Dispose();
+        _audio = null;
         Player.Stop();
         Player.Close();
         Player.Source = null;
