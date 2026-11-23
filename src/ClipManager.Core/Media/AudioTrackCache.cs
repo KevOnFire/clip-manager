@@ -111,6 +111,24 @@ public sealed class AudioTrackCache
 /// <summary>Liest Lautstärke-Spitzen aus einer 16-Bit-PCM-WAV-Datei, für die Wellenform im Editor.</summary>
 public static class Waveform
 {
+    /// <summary>Unterster Pegel, der in der Wellenform noch sichtbar ist (in dB).</summary>
+    public const double FloorDb = -50;
+
+    /// <summary>
+    /// Rechnet einen Spitzenwert (0..1) in eine Höhe (0..1) für die Anzeige um. Logarithmisch (dB) wie in
+    /// Schnittprogrammen üblich, damit auch leise Spuren (z.B. Musik im Hintergrund) sichtbar sind.
+    /// </summary>
+    public static double DisplayHeight(float peak)
+    {
+        if (peak <= 0)
+        {
+            return 0;
+        }
+
+        var db = 20 * Math.Log10(Math.Min(1.0, peak));
+        return Math.Clamp((db - FloorDb) / -FloorDb, 0, 1);
+    }
+
     /// <summary>Teilt die Datei in "buckets" gleich lange Stücke und gibt pro Stück den lautesten Wert (0..1) zurück.</summary>
     public static float[] ReadPeaks(string wavPath, int buckets)
     {
