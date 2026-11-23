@@ -234,9 +234,14 @@ public partial class SettingsView : UserControl
     private void FillTrackNames()
     {
         var names = App.Settings.TrackNames;
-        var count = Math.Max(names.Count == 0 ? 0 : names.Keys.Max() + 1, 1);
+        var colors = App.Settings.TrackColors;
+        var count = names.Keys.Concat(colors.Keys).DefaultIfEmpty(-1).Max() + 1;
+        count = Math.Max(count, 1);
         _trackNames = Enumerable.Range(0, count)
-            .Select(i => new TrackNameRow(i, names.TryGetValue(i, out var n) ? n : string.Empty))
+            .Select(i => new TrackNameRow(
+                i,
+                names.TryGetValue(i, out var n) ? n : string.Empty,
+                colors.TryGetValue(i, out var c) && AppSettings.IsHexColor(c) ? c : null))
             .ToList();
         ShowTrackNames();
     }
@@ -257,12 +262,15 @@ public partial class SettingsView : UserControl
         App.Settings.TrackNames = _trackNames
             .Where(r => !string.IsNullOrWhiteSpace(r.Name))
             .ToDictionary(r => r.Index, r => r.Name.Trim());
+        App.Settings.TrackColors = _trackNames
+            .Where(r => r.Color != null)
+            .ToDictionary(r => r.Index, r => r.Color!);
         App.SaveSettings();
     }
 
     private void AddTrackName_Click(object sender, RoutedEventArgs e)
     {
-        _trackNames.Add(new TrackNameRow(_trackNames.Count, string.Empty));
+        _trackNames.Add(new TrackNameRow(_trackNames.Count, string.Empty, null));
         ShowTrackNames();
     }
 
@@ -278,14 +286,88 @@ public partial class SettingsView : UserControl
 
     private void TrackName_LostFocus(object sender, RoutedEventArgs e) => SaveTrackNames();
 
+    /// <summary>Klick aufs Farbfeld: Menü mit Farben zur Auswahl.</summary>
+    private void TrackColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: TrackNameRow row } button)
+        {
+            return;
+        }
+
+        var menu = new ContextMenu { PlacementTarget = button, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        var swatches = new WrapPanel { Width = 6 * 32 };
+        foreach (var hex in AppSettings.Palette)
+        {
+            var swatch = new Button
+            {
+                Width = 26,
+                Height = 26,
+                Margin = 3,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = hex,
+                Template = SwatchTemplate(ToBrush(hex), hex == row.CurrentColor),
+            };
+            swatch.Click += (_, _) =>
+            {
+                row.Color = hex == AppSettings.DefaultTrackColor(row.Index) ? null : hex;
+                menu.IsOpen = false;
+                ShowTrackNames();
+                SaveTrackNames();
+            };
+            swatches.Children.Add(swatch);
+        }
+
+        menu.Items.Add(new MenuItem { Header = swatches, StaysOpenOnClick = true });
+        if (row.Color != null)
+        {
+            var reset = new MenuItem { Header = "Standardfarbe" };
+            reset.Click += (_, _) =>
+            {
+                row.Color = null;
+                ShowTrackNames();
+                SaveTrackNames();
+            };
+            menu.Items.Add(reset);
+        }
+
+        menu.IsOpen = true;
+    }
+
+    private static ControlTemplate SwatchTemplate(System.Windows.Media.Brush brush, bool selected)
+    {
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(Border.BackgroundProperty, brush);
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+        border.SetValue(Border.BorderThicknessProperty, new Thickness(selected ? 2 : 1));
+        border.SetValue(
+            Border.BorderBrushProperty,
+            selected ? System.Windows.Media.Brushes.White : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)));
+        return new ControlTemplate(typeof(Button)) { VisualTree = border };
+    }
+
+    private static System.Windows.Media.SolidColorBrush ToBrush(string hex)
+    {
+        var brush = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex));
+        brush.Freeze();
+        return brush;
+    }
+
     /// <summary>Eine Zeile in der Liste der Spur-Namen.</summary>
     public sealed class TrackNameRow
     {
-        public TrackNameRow(int index, string name)
+        public TrackNameRow(int index, string name, string? color)
         {
             Index = index;
             Name = name;
+            Color = color;
         }
+
+        /// <summary>Eigene Farbe oder null (= Standardfarbe).</summary>
+        public string? Color { get; set; }
+
+        public string CurrentColor => Color ?? AppSettings.DefaultTrackColor(Index);
+
+        public System.Windows.Media.Brush ColorBrush => ToBrush(CurrentColor);
 
         public int Index { get; }
 

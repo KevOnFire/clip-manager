@@ -13,8 +13,10 @@ public sealed class TrackRowViewModel : INotifyPropertyChanged
     private double _volume;
     private bool _syncing;
 
-    public TrackRowViewModel(EditTimeline timeline, int index, string name)
+    public TrackRowViewModel(EditTimeline timeline, int index, string name, System.Windows.Media.Color color)
     {
+        ColorBrush = new System.Windows.Media.SolidColorBrush(color);
+        ColorBrush.Freeze();
         _timeline = timeline;
         Index = index;
         _name = name;
@@ -24,6 +26,9 @@ public sealed class TrackRowViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public int Index { get; }
+
+    /// <summary>Farbe der Spur (wie die Wellenform).</summary>
+    public System.Windows.Media.SolidColorBrush ColorBrush { get; }
 
     public string Name
     {

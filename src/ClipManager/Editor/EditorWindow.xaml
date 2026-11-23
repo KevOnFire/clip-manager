@@ -132,6 +132,14 @@
                                 Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
                                 CornerRadius="4">
                                 <DockPanel VerticalAlignment="Center">
+                                    <Border
+                                        Width="4"
+                                        Height="20"
+                                        Margin="0,0,6,0"
+                                        VerticalAlignment="Center"
+                                        Background="{Binding ColorBrush}"
+                                        CornerRadius="2"
+                                        DockPanel.Dock="Left" />
                                     <CheckBox
                                         MinWidth="0"
                                         Margin="0,0,4,0"

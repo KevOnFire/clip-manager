@@ -132,6 +132,37 @@ public sealed class TimelineControl : FrameworkElement
         }
     }
 
+    /// <summary>Farbe pro Spur für die Wellenform.</summary>
+    public IReadOnlyList<Color>? TrackColors
+    {
+        get => _trackColors;
+        set
+        {
+            _trackColors = value;
+            _waveBrushes.Clear();
+            InvalidateVisual();
+        }
+    }
+
+    private IReadOnlyList<Color>? _trackColors;
+    private readonly Dictionary<int, Brush> _waveBrushes = new();
+
+    private Brush WaveBrushFor(int track)
+    {
+        if (_trackColors == null || track >= _trackColors.Count)
+        {
+            return WaveBrush;
+        }
+
+        if (!_waveBrushes.TryGetValue(track, out var brush))
+        {
+            brush = Frozen(new SolidColorBrush(_trackColors[track]));
+            _waveBrushes[track] = brush;
+        }
+
+        return brush;
+    }
+
     private int TrackCount => _timeline?.Tracks.Count ?? 0;
 
     public ImageSource? Filmstrip
@@ -675,7 +706,7 @@ public sealed class TimelineControl : FrameworkElement
             {
                 dc.PushTransform(new TranslateTransform(lane.Left, lane.Top + lane.Height / 2));
                 dc.PushTransform(new ScaleTransform(1, lane.Height / 2 - 2));
-                dc.DrawGeometry(track.Enabled ? WaveBrush : WaveOffBrush, null, wave);
+                dc.DrawGeometry(track.Enabled ? WaveBrushFor(i) : WaveOffBrush, null, wave);
                 dc.Pop();
                 dc.Pop();
             }

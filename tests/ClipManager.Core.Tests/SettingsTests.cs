@@ -112,3 +112,43 @@ public class SettingsTests
         Assert.True(File.Exists(path + ".bak"));
     }
 }
+
+public class TrackColorTests
+{
+    [Fact]
+    public void TrackColor_OwnColorOrDefault()
+    {
+        var s = new AppSettings();
+        Assert.Equal(AppSettings.Palette[0], s.TrackColor(0));
+        Assert.NotEqual(s.TrackColor(1), s.TrackColor(2));
+        Assert.Equal(AppSettings.Palette[1], s.TrackColor(AppSettings.Palette.Count + 1));
+
+        s.TrackColors[4] = "#1DB954";
+        Assert.Equal("#1DB954", s.TrackColor(4));
+
+        // Kaputte Werte aus der settings.json fallen auf den Standard zurück.
+        s.TrackColors[3] = "grün";
+        Assert.Equal(AppSettings.Palette[3], s.TrackColor(3));
+    }
+
+    [Fact]
+    public void TrackColors_AreSaved()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new SettingsStore(Path.Combine(dir, "settings.json"));
+            var s = new AppSettings();
+            s.TrackColors[2] = "#FF0000";
+            store.Save(s);
+            Assert.Equal("#FF0000", store.Load().TrackColor(2));
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+}

@@ -122,8 +122,8 @@
             <!-- Tonspur-Namen -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource CardTitle}" Text="Tonspur-Namen" />
-                    <TextBlock Style="{StaticResource Hint}" Text="So heißen die Spuren im Editor bei jedem Clip. Z.B. Spur 1 = Alles, Spur 2 = Spiel, Spur 3 = Mikro. Leer lassen = &quot;Spur N&quot;." />
+                    <TextBlock Style="{StaticResource CardTitle}" Text="Tonspuren" />
+                    <TextBlock Style="{StaticResource Hint}" Text="So heißen die Spuren im Editor bei jedem Clip, und in dieser Farbe wird ihre Wellenform gezeichnet. Z.B. Spur 1 = Alles, Spur 2 = Spiel, Spur 3 = Mikro. Leer lassen = &quot;Spur N&quot;. Auf das Farbfeld klicken, um die Farbe zu ändern." />
                     <ItemsControl x:Name="TrackNameList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -133,6 +133,27 @@
                                         DockPanel.Dock="Left"
                                         Style="{StaticResource Label}"
                                         Text="{Binding Label}" />
+                                    <Button
+                                        Width="28"
+                                        Height="28"
+                                        Margin="0,0,8,0"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="TrackColor_Click"
+                                        Cursor="Hand"
+                                        DockPanel.Dock="Left"
+                                        ToolTip="Farbe ändern">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border
+                                                    Background="{Binding ColorBrush}"
+                                                    BorderBrush="#40FFFFFF"
+                                                    BorderThickness="1"
+                                                    CornerRadius="6" />
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
                                     <ui:Button
                                         Margin="8,0,0,0"
                                         Padding="8,6"
