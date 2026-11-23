@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using ClipManager.Core.Editing;
+using ClipManager.Core.Media;
 
 namespace ClipManager.Editor;
 
@@ -754,7 +755,7 @@ public sealed class TimelineControl : FrameworkElement
                 max = Math.Max(max, peaks[b]);
             }
 
-            values[x] = Math.Max(0.02, Math.Min(1, max));
+            values[x] = Math.Max(0.02, Waveform.DisplayHeight(max));
         }
 
         var geometry = new StreamGeometry();
