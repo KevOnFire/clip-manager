@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using ClipManager.Core.Media;
 using ClipManager.Core.Settings;
+using ClipManager.Core.Updates;
 using Microsoft.Win32;
 
 namespace ClipManager.Views;
@@ -12,6 +13,7 @@ public partial class SettingsView : UserControl
 {
     private bool _loading;
     private bool _ffmpegChecked;
+    private ReleaseInfo? _release;
 
     public SettingsView()
     {
@@ -35,6 +37,10 @@ public partial class SettingsView : UserControl
 
             ExportFolderText.Text = App.ExportFolder;
             ResetExportFolderButton.IsEnabled = !string.IsNullOrWhiteSpace(s.ExportFolder);
+            if (_release == null)
+            {
+                UpdateStatusText.Text = $"Installiert: Version {AppUpdater.CurrentVersionText}";
+            }
         }
         finally
         {
@@ -161,7 +167,7 @@ public partial class SettingsView : UserControl
         try
         {
             var paths = App.LocateFfmpeg();
-            var status = await new FfmpegProbe(new ProcessRunner()).CheckAsync(paths);
+            var status = await new FfmpegProbe(App.ProcessRunner).CheckAsync(paths);
 
             FfmpegStatusText.Text = status.Found
                 ? $"✓ Gefunden, Version {status.Version}"
@@ -182,6 +188,33 @@ public partial class SettingsView : UserControl
         GpuEncoderState.Unavailable => "✗ Keine passende Grafikkarte gefunden",
         _ => "✗ Nicht in diesem FFmpeg enthalten",
     };
+
+    private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        UpdateStatusText.Text = "Suche nach Updates …";
+        try
+        {
+            _release = await AppUpdater.CheckAsync();
+            UpdateStatusText.Text = _release == null
+                ? $"Du hast die neueste Version ({AppUpdater.CurrentVersionText})."
+                : $"Version {_release.Version.ToString(3)} ist verfügbar (installiert: {AppUpdater.CurrentVersionText}).";
+            InstallUpdateButton.Visibility = _release == null ? Visibility.Collapsed : Visibility.Visible;
+            (Application.Current.MainWindow as MainWindow)?.ShowUpdate(_release);
+        }
+        finally
+        {
+            CheckUpdateButton.IsEnabled = true;
+        }
+    }
+
+    private async void InstallUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (_release != null && Application.Current.MainWindow is MainWindow window)
+        {
+            await window.InstallUpdateAsync(_release);
+        }
+    }
 
     private sealed record TierItem(DiscordTier Tier, string Label);
 }

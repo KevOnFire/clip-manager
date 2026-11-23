@@ -6,9 +6,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      APP_VERSION: 0.${{ github.run_number }}.0
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +30,7 @@ jobs:
           --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ env.APP_VERSION }}
           -o publish
 
       - name: FFmpeg dazulegen
@@ -37,6 +43,7 @@ jobs:
           New-Item -ItemType Directory -Force publish/ffmpeg | Out-Null
           Copy-Item "$($bin.FullName)/*" publish/ffmpeg/
           if (-not (Test-Path publish/ffmpeg/ffmpeg.exe)) { throw "ffmpeg.exe fehlt" }
+          if (-not (Test-Path publish/ffmpeg/ffprobe.exe)) { throw "ffprobe.exe fehlt" }
           & publish/ffmpeg/ffmpeg.exe -hide_banner -version | Select-Object -First 1
 
       - uses: actions/upload-artifact@v4
@@ -44,3 +51,14 @@ jobs:
           name: ClipManager-win-x64
           path: publish/
           retention-days: 30
+
+      # Nur auf main: Release anlegen, das der Update-Knopf im Programm findet.
+      - name: Release erstellen
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          Compress-Archive -Path publish/* -DestinationPath ClipManager-win-x64.zip
+          gh release create "v$env:APP_VERSION" ClipManager-win-x64.zip --title "Clip Manager $env:APP_VERSION" --notes "$env:NOTES"
