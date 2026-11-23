@@ -154,6 +154,12 @@ public partial class SettingsView : UserControl
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
     }
 
+    private void OpenLog_Click(object sender, RoutedEventArgs e)
+    {
+        Directory.CreateDirectory(App.LogFolder);
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{App.LogFolder}\"") { UseShellExecute = true });
+    }
+
     private async void CheckFfmpeg_Click(object sender, RoutedEventArgs e) => await CheckFfmpegAsync();
 
     private async Task CheckFfmpegAsync()

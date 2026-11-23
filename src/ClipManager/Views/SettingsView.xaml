@@ -203,12 +203,19 @@
                         <TextBlock Grid.Row="3" Margin="0,8,0,0" Style="{StaticResource Label}" Text="AMD (AMF)" />
                         <TextBlock x:Name="AmdText" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource Label}" />
                     </Grid>
-                    <ui:Button
-                        x:Name="CheckFfmpegButton"
-                        Margin="0,12,0,0"
-                        Click="CheckFfmpeg_Click"
-                        Content="Erneut prüfen"
-                        Icon="{ui:SymbolIcon ArrowClockwise24}" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <ui:Button
+                            x:Name="CheckFfmpegButton"
+                            Margin="0,0,8,0"
+                            Click="CheckFfmpeg_Click"
+                            Content="Erneut prüfen"
+                            Icon="{ui:SymbolIcon ArrowClockwise24}" />
+                        <ui:Button
+                            Click="OpenLog_Click"
+                            Content="Log-Ordner öffnen"
+                            Icon="{ui:SymbolIcon DocumentText24}"
+                            ToolTip="Für die Fehlersuche: log.txt aus diesem Ordner an Claude schicken" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </StackPanel>

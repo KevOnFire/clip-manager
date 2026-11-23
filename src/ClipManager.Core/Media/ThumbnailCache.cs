@@ -67,7 +67,7 @@ public sealed class ThumbnailCache
                 ffmpegPath,
                 new[]
                 {
-                    "-hide_banner", "-loglevel", "error",
+                    "-hide_banner", "-nostdin", "-loglevel", "error",
                     "-ss", seek, "-i", clip.Path,
                     "-frames:v", "1", "-vf", $"scale={Width}:-2", "-q:v", "4",
                     "-y", partial,
@@ -77,14 +77,16 @@ public sealed class ThumbnailCache
 
             if (result.ExitCode != 0 || !File.Exists(partial))
             {
+                Log.Error($"Vorschaubild für \"{clip.Path}\" fehlgeschlagen (Exit {result.ExitCode}): {result.StdErr.Trim()}");
                 return null;
             }
 
             File.Move(partial, target, overwrite: true);
             return target;
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
         {
+            Log.Error($"Vorschaubild für \"{clip.Path}\" fehlgeschlagen", ex);
             return null;
         }
         finally

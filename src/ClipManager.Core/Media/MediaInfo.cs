@@ -133,6 +133,12 @@ public sealed class MediaInfoReader
             TimeSpan.FromSeconds(30),
             cancellationToken).ConfigureAwait(false);
 
-        return result.ExitCode == 0 ? MediaInfo.ParseFfprobeJson(result.StdOut) : null;
+        if (result.ExitCode != 0)
+        {
+            Log.Error($"ffprobe für \"{file}\" fehlgeschlagen (Exit {result.ExitCode}): {result.StdErr.Trim()}");
+            return null;
+        }
+
+        return MediaInfo.ParseFfprobeJson(result.StdOut);
     }
 }

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using ClipManager.Core;
 using ClipManager.Core.Library;
 using ClipManager.Core.Media;
 using ClipManager.Core.Settings;
@@ -29,6 +30,8 @@ public partial class App : Application
     public static string ExportFolder =>
         string.IsNullOrWhiteSpace(Settings.ExportFolder) ? DefaultExportFolder : Settings.ExportFolder;
 
+    public static string LogFolder => Path.GetDirectoryName(Log.FilePath) ?? AppDirectory;
+
     public static void SaveSettings() => SettingsStore.Save(Settings);
 
     public static FfmpegPaths? LocateFfmpeg() =>
@@ -38,14 +41,25 @@ public partial class App : Application
     {
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandledException;
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log.Error("Unbeobachteter Fehler in Hintergrundaufgabe", args.Exception);
+            args.SetObserved();
+        };
+
+        var localDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipManager");
+        Log.FilePath = Path.Combine(localDir, "log.txt");
+        Log.Info($"Start, Version {AppUpdater.CurrentVersionText}, Ordner {AppDirectory}");
 
         var dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClipManager");
         SettingsStore = new SettingsStore(Path.Combine(dataDir, "settings.json"));
         Settings = SettingsStore.Load();
         Db = new LibraryDb(Path.Combine(dataDir, "library.db"));
 
-        var cacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipManager", "thumbs");
-        Thumbnails = new ThumbnailCache(cacheDir, ProcessRunner);
+        Thumbnails = new ThumbnailCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
+
+        var ffmpeg = LocateFfmpeg();
+        Log.Info(ffmpeg == null ? "FFmpeg nicht gefunden" : $"FFmpeg: {ffmpeg.Ffmpeg}, ffprobe: {ffmpeg.Ffprobe ?? "fehlt"}");
 
         var window = new MainWindow();
         MainWindow = window;
@@ -54,6 +68,7 @@ public partial class App : Application
 
     private static void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
+        Log.Error("Unbehandelter Fehler", e.Exception);
         MessageBox.Show(
             $"Da ist etwas schiefgelaufen:\n\n{e.Exception.Message}",
             "Clip Manager",
