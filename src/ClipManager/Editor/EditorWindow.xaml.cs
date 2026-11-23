@@ -22,6 +22,7 @@ public partial class EditorWindow : FluentWindow
 
     private readonly ClipFile _clip;
     private readonly TimeSpan? _knownDuration;
+    private readonly MediaInfo? _info;
     private readonly DispatcherTimer _timer;
     private EditTimeline? _timeline;
     private bool _playing;
@@ -36,6 +37,7 @@ public partial class EditorWindow : FluentWindow
         InitializeComponent();
         _clip = clip;
         _knownDuration = info?.Duration;
+        _info = info;
         if (info is { Fps: > 1 })
         {
             _fps = info.Fps;
@@ -451,6 +453,17 @@ public partial class EditorWindow : FluentWindow
     private void Undo_Click(object sender, RoutedEventArgs e) => _timeline?.Undo();
 
     private void Reset_Click(object sender, RoutedEventArgs e) => _timeline?.Reset();
+
+    private void Export_Click(object sender, RoutedEventArgs e)
+    {
+        if (_timeline == null)
+        {
+            return;
+        }
+
+        SetPlaying(false);
+        new ExportWindow(_clip, _info, _timeline.KeptRanges) { Owner = this }.ShowDialog();
+    }
 
     private void OnClosed(object? sender, EventArgs e)
     {

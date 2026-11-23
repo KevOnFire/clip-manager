@@ -46,6 +46,7 @@ src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linu
   Editing/                EditTimeline (Anfang/Ende, Schnitte, entfernte Teile, Rückgängig), ClipEditState (JSON), TimeText
   Library/                ClipScanner, ClipFile, LibraryDb (SQLite), LibraryQuery (Filter/Sort/Seiten), ClipFileOps (Kopie/Umbenennen)
   Media/                  FfmpegLocator, FfmpegProbe (Version + GPU-Test), MediaInfo (ffprobe), ThumbnailCache, FilmstripCache (Zeitleiste), ProcessRunner
+  Export/                 ExportPlanner (Bitrate/Auflösung aus Limit), ExportCommand (FFmpeg-Filtergraph), Exporter (Lauf, Fortschritt, Größen-Check + Wiederholung)
   Updates/                UpdateChecker (GitHub-API), UpdateScript (cmd zum Ersetzen + Neustart)
 src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   App.xaml(.cs)           Start, globale Dienste (Settings, Db, Thumbnails)
@@ -53,6 +54,7 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   Views/LibraryView       Kacheln, Seiten, Filter, Menü, Ordner-Überwachung, Klick öffnet Editor
   Editor/EditorWindow     Editor-Fenster: Player, Tastenkürzel, speichert Schnitte automatisch in der DB
   Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf)
+  Editor/ExportWindow     Export-Dialog: Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Speichern unter
   Views/SettingsView      Ordner, Discord, Export-Ordner, Updates, FFmpeg/GPU
   AppUpdater, ShellFiles, Dialogs, FolderPicker
 tests/ClipManager.Core.Tests/   xUnit-Tests für Core
@@ -103,8 +105,8 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | 1 | Grundgerüst, Einstellungen, FFmpeg- und GPU-Erkennung | fertig (PR #1) |
 | 2 | Bibliothek: Kacheln, Vorschaubilder, Dauer, Favoriten, Seiten, Suche/Sortierung, Umbenennen/Kopie/Löschen, Ordner-Überwachung | fertig (PR #2) |
 | – | Update-Knopf, Releases, diese Übergabe-Datei | fertig (in PR #2) |
-| 3 | Editor Teil 1: Player, Zeitleiste mit Vorschaubildern, Anfang/Ende kürzen, Stellen in der Mitte rausschneiden, Tastenkürzel | in PR #4 (Klicktest durch Kev offen) |
-| 4 | Export: Discord-Stufen, Bitrate-Rechnung, GPU-Encoder, Fortschritt, fertigen Clip per Drag-and-Drop aus dem Programm ziehen, "Speichern unter" | offen |
+| 3 | Editor Teil 1: Player, Zeitleiste mit Vorschaubildern, Anfang/Ende kürzen, Stellen in der Mitte rausschneiden, Tastenkürzel | fertig (PR #4, Fixes in PR #5) |
+| 4 | Export: Discord-Stufen, Bitrate-Rechnung, GPU-Encoder, Fortschritt, fertigen Clip per Drag-and-Drop aus dem Programm ziehen, "Speichern unter" | in PR #6 (Klicktest offen) |
 | 5 | Editor Teil 2: Audiospuren einzeln (Lautstärke, stumm, stumme Bereiche), Vorschau hört genau, was exportiert wird | offen |
 | 6 | Feinschliff: Hover-Vorschau auf Kacheln, Design, Fehlerfälle | offen |
 | 7 | Für andere: Installer, Ersteinrichtung, ggf. Code-Signatur | offen |
@@ -141,7 +143,10 @@ Auflösung automatisch anpassen (Startwerte, mit echten Clips nachjustieren):
 - Nach dem Export echte Dateigröße prüfen; zu groß → mit ~5–8 % weniger Bitrate wiederholen.
 - Audio: aktive Spuren mit Lautstärken und stummen Bereichen per `amix`/`volume`-Filter zu einer Spur mischen, AAC 128 kbit/s (bei sehr knappem Limit 96).
 - Schnitte mit `trim`/`atrim` + `concat` im Filtergraph.
-- Exporte landen im Export-Ordner (wird von der Bibliothek ausgeblendet).
+- Exporte landen im Export-Ordner (wird von der Bibliothek ausgeblendet). "Volle Qualität" landet als "(Kopie)" neben dem Original.
+- Umgesetzt (PR #6): GPU-Export schlägt fehl → automatisch einmal mit CPU. Tonspuren vorerst nach Standardregel
+  (`ExportPlanner.DefaultAudioTracks`), Auswahl pro Spur kommt mit Etappe 5. Kopieren-Knopf legt die Datei in die
+  Zwischenablage (in Discord Strg+V).
 
 ## Arbeitsweise
 
