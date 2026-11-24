@@ -29,6 +29,7 @@ public partial class SettingsView : UserControl
             var s = App.Settings;
             FolderList.ItemsSource = null;
             FolderList.ItemsSource = s.ClipFolders.ToList();
+            SubfoldersSwitch.IsChecked = s.ScanSubfolders;
 
             FreeLimitBox.Text = s.LimitFor(DiscordTier.Free).ToString();
             BasicLimitBox.Text = s.LimitFor(DiscordTier.NitroBasic).ToString();
@@ -126,6 +127,17 @@ public partial class SettingsView : UserControl
         App.Settings.RemoveClipFolder(folder);
         App.SaveSettings();
         Refresh();
+    }
+
+    private void SubfoldersSwitch_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        App.Settings.ScanSubfolders = SubfoldersSwitch.IsChecked == true;
+        App.SaveSettings();
     }
 
     private void ChangeExportFolder_Click(object sender, RoutedEventArgs e)

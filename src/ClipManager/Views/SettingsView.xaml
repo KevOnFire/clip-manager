@@ -41,7 +41,7 @@
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Style="{StaticResource CardTitle}" Text="Clip-Ordner" />
-                    <TextBlock Style="{StaticResource Hint}" Text="Hier sucht das Programm nach deinen Clips, inklusive Unterordnern." />
+                    <TextBlock Style="{StaticResource Hint}" Text="Hier sucht das Programm nach deinen Clips." />
                     <ListBox
                         x:Name="FolderList"
                         MinHeight="60"
@@ -58,6 +58,12 @@
                             Content="Entfernen"
                             Icon="{ui:SymbolIcon Delete24}" />
                     </StackPanel>
+                    <ui:ToggleSwitch
+                        x:Name="SubfoldersSwitch"
+                        Margin="0,14,0,0"
+                        Checked="SubfoldersSwitch_Changed"
+                        Content="Unterordner mit durchsuchen"
+                        Unchecked="SubfoldersSwitch_Changed" />
                 </StackPanel>
             </Border>
 

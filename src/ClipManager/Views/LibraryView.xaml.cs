@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using ClipManager.Core;
 using ClipManager.Core.Library;
@@ -24,6 +25,7 @@ public partial class LibraryView : UserControl
     private IReadOnlyList<ClipFile> _filtered = Array.Empty<ClipFile>();
     private HashSet<string> _favorites = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _edited = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> _names = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, TimeSpan> _durations = new(StringComparer.OrdinalIgnoreCase);
     private string _signature = string.Empty;
     private int _page;
@@ -45,7 +47,7 @@ public partial class LibraryView : UserControl
             _watchTimer.Stop();
             await RefreshAsync(onlyIfChanged: true);
         };
-        Editor.EditorWindow.EditsSaved += OnEditsSaved;
+        Editor.EditorView.EditsSaved += OnEditsSaved;
     }
 
     /// <summary>Liest die Clip-Ordner neu ein.</summary>
@@ -71,8 +73,9 @@ public partial class LibraryView : UserControl
         }
 
         var exportFolder = App.ExportFolder;
-        var (clips, favorites, durations, edited) = await Task.Run(() =>
-            (ClipScanner.Scan(folders, exportFolder), App.Db.GetFavorites(), App.Db.GetDurations(), App.Db.GetEditedPaths()));
+        var subfolders = App.Settings.ScanSubfolders;
+        var (clips, favorites, durations, edited, names) = await Task.Run(() =>
+            (ClipScanner.Scan(folders, exportFolder, subfolders), App.Db.GetFavorites(), App.Db.GetDurations(), App.Db.GetEditedPaths(), App.Db.GetDisplayNames()));
 
         if (version != _refreshVersion)
         {
@@ -90,6 +93,7 @@ public partial class LibraryView : UserControl
         _favorites = favorites;
         _durations = durations;
         _edited = edited;
+        _names = names;
         UpdateSummary(analyzed: null);
         ApplyFilter(resetPage: false);
         _ = AnalyzeAllAsync(clips);
@@ -99,6 +103,12 @@ public partial class LibraryView : UserControl
 
     private LibraryFilter CurrentFilter() => new(
         FavoritesOnly: ShowCombo.SelectedIndex == 1,
+        Edited: ShowCombo.SelectedIndex switch
+        {
+            2 => EditedFilter.Edited,
+            3 => EditedFilter.Unedited,
+            _ => EditedFilter.All,
+        },
         Folder: (FolderCombo.SelectedItem as FolderItem)?.Path,
         Search: SearchBox.Text,
         Sort: SortCombo.SelectedIndex switch
@@ -107,12 +117,13 @@ public partial class LibraryView : UserControl
             2 => ClipSort.Longest,
             3 => ClipSort.Largest,
             4 => ClipSort.Name,
+            5 => ClipSort.EditedFirst,
             _ => ClipSort.Newest,
         });
 
     private void ApplyFilter(bool resetPage)
     {
-        _filtered = LibraryQuery.Apply(_allClips, CurrentFilter(), _favorites, _durations);
+        _filtered = LibraryQuery.Apply(_allClips, CurrentFilter(), _favorites, _durations, _edited, _names);
         if (resetPage)
         {
             _page = 0;
@@ -125,6 +136,7 @@ public partial class LibraryView : UserControl
     private void ShowPage()
     {
         _pageCts?.Cancel();
+        StopPreviews();
 
         if (App.Settings.ClipFolders.Count == 0)
         {
@@ -145,7 +157,7 @@ public partial class LibraryView : UserControl
         }
 
         var tiles = LibraryQuery.Page(_filtered, _page, PageSize)
-            .Select(c => new ClipTileViewModel(c, _favorites.Contains(c.Path), _edited.Contains(c.Path)))
+            .Select(c => new ClipTileViewModel(c, _favorites.Contains(c.Path), _edited.Contains(c.Path), _names.GetValueOrDefault(c.Path)))
             .ToList();
 
         TileList.ItemsSource = tiles;
@@ -434,11 +446,95 @@ public partial class LibraryView : UserControl
         ApplyFilter(resetPage: false);
     }
 
+    // ---------- Hover-Vorschau: Clip läuft klein und stumm in der Kachel ----------
+
+    private DispatcherTimer? _hoverTimer;
+    private Grid? _hoverGrid;
+    private MediaElement? _hoverPlayer;
+
+    private void Thumb_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is not Grid grid || (grid.DataContext as ClipTileViewModel) is null)
+        {
+            return;
+        }
+
+        StopPreviews();
+        _hoverGrid = grid;
+        // Kurz warten, damit beim Drüberfahren mit der Maus nicht jede Kachel anfängt zu laden.
+        _hoverTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        _hoverTimer.Tick += (_, _) =>
+        {
+            _hoverTimer?.Stop();
+            StartPreview(grid);
+        };
+        _hoverTimer.Start();
+    }
+
+    private void Thumb_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (ReferenceEquals(sender, _hoverGrid))
+        {
+            StopPreviews();
+        }
+    }
+
+    private void StartPreview(Grid grid)
+    {
+        if (!ReferenceEquals(grid, _hoverGrid) || grid.DataContext is not ClipTileViewModel tile || !File.Exists(tile.Clip.Path))
+        {
+            return;
+        }
+
+        var player = new MediaElement
+        {
+            LoadedBehavior = MediaState.Manual,
+            UnloadedBehavior = MediaState.Close,
+            IsMuted = true,
+            Volume = 0,
+            Stretch = Stretch.UniformToFill,
+            IsHitTestVisible = false,
+            Opacity = 0,
+        };
+        player.MediaOpened += (_, _) => player.Opacity = 1;
+        player.MediaEnded += (_, _) =>
+        {
+            player.Position = TimeSpan.Zero;
+            player.Play();
+        };
+        player.MediaFailed += (_, _) => StopPreviews();
+        player.Source = new Uri(tile.Clip.Path);
+
+        // Über dem Vorschaubild, aber unter Dauer, Schere und Stern
+        var index = Math.Min(2, grid.Children.Count);
+        grid.Children.Insert(index, player);
+        _hoverPlayer = player;
+        player.Play();
+    }
+
+    /// <summary>Hält die Hover-Vorschau an und gibt die Datei frei.</summary>
+    public void StopPreviews()
+    {
+        _hoverTimer?.Stop();
+        _hoverTimer = null;
+        if (_hoverPlayer is { } player)
+        {
+            player.Stop();
+            player.Close();
+            player.Source = null;
+            (player.Parent as Panel)?.Children.Remove(player);
+        }
+
+        _hoverPlayer = null;
+        _hoverGrid = null;
+    }
+
     private void Tile_Click(object sender, MouseButtonEventArgs e)
     {
+        StopPreviews();
         if (TileOf(sender) is { } tile)
         {
-            Editor.EditorWindow.OpenFor(tile.Clip, tile.Info, Window.GetWindow(this));
+            (Window.GetWindow(this) as MainWindow)?.OpenEditor(tile.Clip, tile.Info);
         }
     }
 
@@ -513,14 +609,48 @@ public partial class LibraryView : UserControl
         }
     }
 
-    private async void MenuRename_Click(object sender, RoutedEventArgs e)
+    /// <summary>Eigener Name nur fürs Programm: die Datei bleibt, wie sie ist.</summary>
+    private async void MenuDisplayName_Click(object sender, RoutedEventArgs e)
     {
         if (TileOf(sender) is not { } tile)
         {
             return;
         }
 
-        var name = await Dialogs.PromptAsync("Clip umbenennen", "Neuer Name:", tile.Name, "Umbenennen");
+        var name = await Dialogs.PromptAsync(
+            "Namen im Programm ändern",
+            $"So heißt der Clip nur hier in Clippy, die Datei bleibt \"{Path.GetFileName(tile.Clip.Path)}\". Leer lassen = Dateiname.",
+            tile.DisplayName ?? tile.Clip.Name,
+            "Speichern");
+        if (name == null)
+        {
+            return;
+        }
+
+        name = name.Trim();
+        var value = name.Length == 0 || name == tile.Clip.Name ? null : name;
+        App.Db.SetDisplayName(tile.Clip.Path, value);
+        if (value == null)
+        {
+            _names.Remove(tile.Clip.Path);
+        }
+        else
+        {
+            _names[tile.Clip.Path] = value;
+        }
+
+        tile.DisplayName = value;
+    }
+
+    private async void MenuRename_Click(object sender, RoutedEventArgs e)
+    {
+        StopPreviews();
+        if (TileOf(sender) is not { } tile)
+        {
+            return;
+        }
+
+        var name = await Dialogs.PromptAsync("Datei umbenennen", "Neuer Dateiname:", tile.Clip.Name, "Umbenennen");
         if (name == null)
         {
             return;
@@ -568,6 +698,7 @@ public partial class LibraryView : UserControl
 
     private async void MenuDelete_Click(object sender, RoutedEventArgs e)
     {
+        StopPreviews();
         if (TileOf(sender) is not { } tile)
         {
             return;

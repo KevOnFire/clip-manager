@@ -122,7 +122,7 @@ public partial class App : Application
         Log.Error("Unbehandelter Fehler", e.Exception);
         MessageBox.Show(
             $"Da ist etwas schiefgelaufen:\n\n{e.Exception.Message}",
-            "Clip Manager",
+            "Clippy",
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         e.Handled = true;

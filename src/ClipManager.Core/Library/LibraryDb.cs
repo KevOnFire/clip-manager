@@ -41,6 +41,10 @@ public sealed class LibraryDb
                 state_json TEXT NOT NULL,
                 updated INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS display_names (
+                path TEXT PRIMARY KEY COLLATE NOCASE,
+                name TEXT NOT NULL
+            );
             """);
     }
 
@@ -185,6 +189,46 @@ public sealed class LibraryDb
         return result;
     }
 
+    /// <summary>Eigene Namen für Clips, die nur im Programm gelten (Datei bleibt, wie sie ist).</summary>
+    public Dictionary<string, string> GetDisplayNames()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT path, name FROM display_names";
+        using var reader = command.ExecuteReader();
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        while (reader.Read())
+        {
+            result[reader.GetString(0)] = reader.GetString(1);
+        }
+
+        return result;
+    }
+
+    public string? GetDisplayName(string path)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT name FROM display_names WHERE path = $path";
+        command.Parameters.AddWithValue("$path", path);
+        return command.ExecuteScalar() as string;
+    }
+
+    /// <summary>Setzt den Namen im Programm. Leer oder null = wieder den Dateinamen zeigen.</summary>
+    public void SetDisplayName(string path, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            Execute("DELETE FROM display_names WHERE path = $path", ("$path", path));
+            return;
+        }
+
+        Execute(
+            "INSERT INTO display_names (path, name) VALUES ($path, $name) ON CONFLICT(path) DO UPDATE SET name = $name",
+            ("$path", path),
+            ("$name", name.Trim()));
+    }
+
     /// <summary>Nach dem Umbenennen: Favorit und Infos wandern mit.</summary>
     public void MovePath(string oldPath, string newPath) =>
         Execute(
@@ -192,9 +236,11 @@ public sealed class LibraryDb
             DELETE FROM favorites WHERE path = $new;
             DELETE FROM media_info WHERE path = $new;
             DELETE FROM edits WHERE path = $new;
+            DELETE FROM display_names WHERE path = $new;
             UPDATE favorites SET path = $new WHERE path = $old;
             UPDATE media_info SET path = $new WHERE path = $old;
             UPDATE edits SET path = $new WHERE path = $old;
+            UPDATE display_names SET path = $new WHERE path = $old;
             """,
             ("$old", oldPath),
             ("$new", newPath));
@@ -202,7 +248,7 @@ public sealed class LibraryDb
     /// <summary>Nach dem Löschen: Einträge entfernen.</summary>
     public void RemovePath(string path) =>
         Execute(
-            "DELETE FROM favorites WHERE path = $path; DELETE FROM media_info WHERE path = $path; DELETE FROM edits WHERE path = $path;",
+            "DELETE FROM favorites WHERE path = $path; DELETE FROM media_info WHERE path = $path; DELETE FROM edits WHERE path = $path; DELETE FROM display_names WHERE path = $path;",
             ("$path", path));
 
     private SqliteConnection Open()

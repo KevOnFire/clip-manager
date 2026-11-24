@@ -23,7 +23,7 @@ public partial class ExportWindow : FluentWindow
 
     private readonly ClipFile _clip;
     private readonly EditTimeline _timeline;
-    private readonly EditorWindow _editor;
+    private readonly EditorView _editor;
     private readonly IReadOnlyList<TimeRange> _ranges;
     private readonly IReadOnlyList<TrackEdit> _audio;
     private readonly TimeSpan _outputDuration;
@@ -34,7 +34,7 @@ public partial class ExportWindow : FluentWindow
     private string? _outputPath;
     private Point _dragStart;
 
-    public ExportWindow(ClipFile clip, MediaInfo? info, EditTimeline timeline, bool saveMode, EditorWindow editor)
+    public ExportWindow(ClipFile clip, MediaInfo? info, EditTimeline timeline, bool saveMode, EditorView editor)
     {
         InitializeComponent();
         _clip = clip;
@@ -373,7 +373,7 @@ public partial class ExportWindow : FluentWindow
                 App.Db.MovePath(original, target);
             }
 
-            EditorWindow.NotifyEditsChanged(original);
+            EditorView.NotifyEditsChanged(original);
         }
         catch (Exception ex)
         {

@@ -39,6 +39,9 @@ public sealed class AppSettings
         return index == 0 && trackCount > 1 ? "Spur 1 (Mix)" : $"Spur {index + 1}";
     }
 
+    /// <summary>Auch Unterordner der Clip-Ordner nach Clips durchsuchen.</summary>
+    public bool ScanSubfolders { get; set; } = true;
+
     /// <summary>Eigene Farben für Tonspuren (Index ab 0) als "#RRGGBB". Fehlt eine, gilt die Standardfarbe.</summary>
     public Dictionary<int, string> TrackColors { get; set; } = new();
 

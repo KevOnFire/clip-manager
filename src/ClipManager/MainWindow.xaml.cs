@@ -1,5 +1,9 @@
 using System.Windows;
+using System.Windows.Input;
+using ClipManager.Core.Library;
+using ClipManager.Core.Media;
 using ClipManager.Core.Updates;
+using ClipManager.Editor;
 using ClipManager.Views;
 using Wpf.Ui.Controls;
 
@@ -49,7 +53,7 @@ public partial class MainWindow : FluentWindow
 
         var ok = await Dialogs.ConfirmAsync(
             "Update installieren?",
-            $"Version {release.Version.ToString(3)} wird heruntergeladen. Danach startet der Clip Manager kurz neu.",
+            $"Version {release.Version.ToString(3)} wird heruntergeladen. Danach startet Clippy kurz neu.",
             "Installieren");
         if (!ok)
         {
@@ -87,8 +91,89 @@ public partial class MainWindow : FluentWindow
 
     private void SettingsNav_Click(object sender, RoutedEventArgs e) => ShowSettings();
 
+    private EditorView? _editor;
+    private WindowState _stateBeforeFullscreen;
+    private WindowStyle _styleBeforeFullscreen;
+    private ResizeMode _resizeBeforeFullscreen;
+
+    /// <summary>Öffnet den Editor für einen Clip direkt im Hauptfenster (statt der Bibliothek).</summary>
+    public void OpenEditor(ClipFile clip, MediaInfo? info)
+    {
+        if (_editor != null && string.Equals(_editor.ClipPath, clip.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            PageHost.Content = _editor;
+            return;
+        }
+
+        CloseEditor();
+        _library.StopPreviews();
+        var editor = new EditorView(clip, info);
+        editor.CloseRequested += (_, _) =>
+        {
+            if (ReferenceEquals(_editor, editor))
+            {
+                _editor = null;
+                ShowLibrary();
+            }
+        };
+        editor.FullscreenRequested += (_, on) => SetFullscreen(on);
+        _editor = editor;
+        PageHost.Content = editor;
+        LibraryNav.Appearance = ControlAppearance.Primary;
+        SettingsNav.Appearance = ControlAppearance.Transparent;
+    }
+
+    private void CloseEditor()
+    {
+        var editor = _editor;
+        _editor = null;
+        editor?.Close();
+    }
+
+    /// <summary>Vollbild für den Editor: Seitenleiste und Titelleiste weg, Fenster über den ganzen Bildschirm.</summary>
+    private void SetFullscreen(bool on)
+    {
+        var visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        Sidebar.Visibility = visibility;
+        AppTitleBar.Visibility = visibility;
+        SidebarColumn.Width = on ? new GridLength(0) : new GridLength(220);
+        PageHost.Margin = on ? new Thickness(0) : new Thickness(8, 8, 24, 16);
+        if (on)
+        {
+            _stateBeforeFullscreen = WindowState;
+            _styleBeforeFullscreen = WindowStyle;
+            _resizeBeforeFullscreen = ResizeMode;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            // Erst normal, dann maximiert: sonst bleibt die Taskleiste sichtbar.
+            WindowState = WindowState.Normal;
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowStyle = _styleBeforeFullscreen;
+            ResizeMode = _resizeBeforeFullscreen;
+            WindowState = _stateBeforeFullscreen;
+        }
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_editor != null && ReferenceEquals(PageHost.Content, _editor))
+        {
+            _editor.HandleKey(e);
+        }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        CloseEditor();
+        base.OnClosed(e);
+    }
+
     private void ShowLibrary()
     {
+        CloseEditor();
         PageHost.Content = _library;
         LibraryNav.Appearance = ControlAppearance.Primary;
         SettingsNav.Appearance = ControlAppearance.Transparent;
@@ -97,6 +182,7 @@ public partial class MainWindow : FluentWindow
 
     private void ShowSettings()
     {
+        CloseEditor();
         PageHost.Content = _settings;
         LibraryNav.Appearance = ControlAppearance.Transparent;
         SettingsNav.Appearance = ControlAppearance.Primary;

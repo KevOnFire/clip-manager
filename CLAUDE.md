@@ -1,4 +1,4 @@
-# Clip Manager – Übergabe für Agents
+# Clippy (früher Clip Manager) – Übergabe für Agents
 
 Diese Datei ist der Einstieg für jeden Agent (oder Menschen), der hier weiterarbeitet.
 Sie beschreibt Ziel, Entscheidungen, Aufbau, Build und den Fahrplan. Bitte aktuell halten,
@@ -34,6 +34,8 @@ Aufnehmen macht OBS (Replay-Puffer), nicht dieses Programm.
 | Export-Format | H.264 + AAC in MP4 | Spielt in Discord überall direkt ab |
 | Export-Ablage | Export landet erst in `%TEMP%\ClipManager\Export` (für Reinziehen/Kopieren), wird erst per Knopf gespeichert | Kev wollte keine doppelten Dateien |
 | Updates | GitHub Releases, Update-Knopf im Programm | Kev soll nichts manuell runterladen |
+| Name/Icon | Programm heißt **Clippy** (seit 24.11.2026), Icon `src/ClipManager/Assets/clippy.ico/.png` (von Kev). Die exe heißt bewusst weiter `ClipManager.exe`, Ordner/Namespaces auch | Alte Versionen prüfen beim Update auf `ClipManager.exe` im ZIP; Umbenennen der exe würde den Update-Knopf kaputt machen |
+| Editor | Läuft im Hauptfenster (`EditorView`, UserControl) statt eigenem Fenster; Vollbild per F/Doppelklick/Knopf, Esc beendet | Kev wollte kein 2. Fenster (24.11.2026) |
 | Vorschau im Editor | Bild: WPF `MediaElement` (stumm). Ton: Spuren per FFmpeg als WAV in den Cache, mit NAudio gemischt (`TrackPlayer`), Video ist der Takt, Ton wird bei >120 ms Abweichung nachgezogen | Hört genau, was exportiert wird. Bis die WAVs fertig sind, spielt MediaElement Spur 1 |
 
 Falls MediaElement bei manchen Formaten (MKV, HEVC) nicht reicht: LibVLC/mpv nur fürs Bild.
@@ -51,8 +53,11 @@ src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linu
 src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   App.xaml(.cs)           Start, globale Dienste (Settings, Db, Thumbnails)
   MainWindow              Seitenleiste (Bibliothek, Einstellungen, Update-Knopf)
-  Views/LibraryView       Kacheln, Seiten, Filter, Menü, Ordner-Überwachung, Klick öffnet Editor
-  Editor/EditorWindow     Editor-Fenster: Player, Tastenkürzel, speichert Schnitte automatisch in der DB
+  Views/LibraryView       Kacheln, Seiten, Filter (Favoriten/geschnitten/ungeschnitten), Menü, Ordner-Überwachung,
+                          Hover-Vorschau (stummes MediaElement in der Kachel), eigener Name im Programm (Tabelle display_names),
+                          Klick öffnet Editor im Hauptfenster
+  Editor/EditorView       Editor als Seite im Hauptfenster: Player, Vollbild, Tastenkürzel (kommen über MainWindow.PreviewKeyDown),
+                          speichert Schnitte automatisch in der DB
   Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf, Spur-Zeilen).
                           Bedienung: in Spur ziehen = Auswahl → Menü (stumm / rausschneiden), Ränder von stummen und
                           rausgeschnittenen Stellen ziehbar, Klick auf so eine Stelle = Menü (wieder laut / reinnehmen)
@@ -91,7 +96,7 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | Was | Wo |
 | --- | --- |
 | Einstellungen | `%AppData%\ClipManager\settings.json` |
-| Favoriten, Clip-Infos, Schnitte (Tabelle `edits`) | `%AppData%\ClipManager\library.db` |
+| Favoriten, Clip-Infos, Schnitte (Tabelle `edits`), eigene Namen (`display_names`) | `%AppData%\ClipManager\library.db` |
 | Vorschaubilder, Filmstreifen | `%LocalAppData%\ClipManager\thumbs\` |
 | Tonspuren als WAV (Cache, 3 Tage) | `%LocalAppData%\ClipManager\audio\` |
 | Zwischen-Exporte (2 Tage) | `%TEMP%\ClipManager\Export\` |
@@ -115,7 +120,7 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | 3 | Editor Teil 1: Player, Zeitleiste mit Vorschaubildern, Anfang/Ende kürzen, Stellen in der Mitte rausschneiden, Tastenkürzel | fertig (PR #4, Fixes in PR #5) |
 | 4 | Export: Discord-Stufen, Bitrate-Rechnung, GPU-Encoder, Fortschritt, fertigen Clip per Drag-and-Drop aus dem Programm ziehen, "Speichern unter" | fertig (PR #6, #7) |
 | 5 | Editor Teil 2: Audiospuren einzeln (Lautstärke, stumm, stumme Bereiche), Vorschau hört genau, was exportiert wird; Speichern (ersetzen/Kopie) | fertig (PR #8); Schneiden per Ziehen + Spur-Namen in den Einstellungen in PR #9 |
-| 6 | Feinschliff: Hover-Vorschau auf Kacheln, Design, Fehlerfälle | offen |
+| 6 | Feinschliff: Hover-Vorschau auf Kacheln, Design, Fehlerfälle | teilweise (PR #13: Clippy-Name/Icon, Editor im Hauptfenster, Vollbild, Hover-Vorschau, eigene Namen, Filter geschnitten, Unterordner an/aus, Griffe an Rändern) |
 | 7 | Für andere: Installer, Ersteinrichtung, ggf. Code-Signatur | offen |
 
 ### Etappe 3/5: Editor (Plan)

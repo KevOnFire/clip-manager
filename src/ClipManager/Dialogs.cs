@@ -45,7 +45,7 @@ internal static class Dialogs
         };
 
         var panel = new StackPanel();
-        panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 0, 0, 8) });
+        panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(0, 0, 0, 8), TextWrapping = TextWrapping.Wrap, MaxWidth = 380 });
         panel.Children.Add(input);
 
         var box = new UiMessageBox
