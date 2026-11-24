@@ -207,6 +207,68 @@ public class ExportTests
         Assert.True(silent < -60, $"Stumme Stellen sollten still sein: {silent} dB");
     }
 
+    [Fact]
+    public void GainFilter_LeiserGemachteStelle()
+    {
+        var edit = new TrackEdit(0, true, 1, Array.Empty<TimeRange>()) { Ducked = new[] { new DuckRange(new TimeRange(S(3), S(5)), -12) } };
+        Assert.Equal(
+            "asetnsamples=n=64:p=0,volume='pow(10,-12*clip(min((t-1)/0.3,(3-t)/0.3),0,1)/20)':eval=frame,",
+            ExportCommand.TrackGainFilter(edit, S(2)));
+    }
+
+    [Fact]
+    public async Task RealExport_LeiserGemachteStelleIstLeiser()
+    {
+        var ffmpeg = FfmpegLocator.Locate(null, Environment.GetEnvironmentVariable("CLIPMANAGER_FFMPEG_DIR") ?? "-", Environment.GetEnvironmentVariable("PATH"));
+        if (ffmpeg?.Ffprobe == null)
+        {
+            return;
+        }
+
+        using var dir = new TempDir();
+        var runner = new ProcessRunner();
+        var video = Path.Combine(dir.Path, "clip.mp4");
+        var make = await runner.RunAsync(
+            ffmpeg.Ffmpeg,
+            new[]
+            {
+                "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", "testsrc2=s=320x240:r=30:d=6",
+                "-f", "lavfi", "-i", "sine=f=440:d=6",
+                "-map", "0", "-map", "1",
+                "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-y", video,
+            },
+            TimeSpan.FromSeconds(60));
+        Assert.True(make.ExitCode == 0, make.StdErr);
+
+        var timeline = new EditTimeline(S(6));
+        timeline.InitTracks(1, new[] { 0 });
+        Assert.True(timeline.DuckTrackRange(0, S(2), S(4), -20));
+        var output = Path.Combine(dir.Path, "out.mp4");
+        var result = await new Exporter().RunAsync(
+            new ExportRequest(ffmpeg.Ffmpeg, video, output, timeline.KeptRanges, timeline.AudibleTracks.ToList(), 240, 30, VideoEncoder.Cpu, null),
+            null,
+            CancellationToken.None);
+        Assert.True(result.Success, result.Error);
+
+        async Task<double> MaxVolume(double from, double to)
+        {
+            var r = await runner.RunAsync(
+                ffmpeg.Ffmpeg,
+                new[] { "-hide_banner", "-ss", from.ToString(System.Globalization.CultureInfo.InvariantCulture), "-t", (to - from).ToString(System.Globalization.CultureInfo.InvariantCulture), "-i", output, "-af", "volumedetect", "-vn", "-f", "null", "-" },
+                TimeSpan.FromSeconds(30));
+            var line = r.StdErr.Split('\n').First(l => l.Contains("max_volume"));
+            var value = line[(line.IndexOf("max_volume:") + 11)..].Replace("dB", string.Empty).Trim();
+            return double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var normal = await MaxVolume(0.5, 1.5);
+        var quiet = await MaxVolume(2.5, 3.5);
+        var after = await MaxVolume(4.5, 5.5);
+        Assert.InRange(normal - quiet, 17, 23);
+        Assert.InRange(Math.Abs(normal - after), 0, 1.5);
+    }
+
     [Theory]
     [InlineData("out_time_us=1500000", 1.5)]
     [InlineData("out_time_us=N/A", null)]

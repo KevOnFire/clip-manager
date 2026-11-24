@@ -290,6 +290,15 @@ public partial class ExportWindow : FluentWindow
         PreviewPlayer.Source = null;
     }
 
+    // Inhalt an den runden Ecken abschneiden (ClipToBounds schneidet nur eckig, das Video ragte über den Rand).
+    private void PreviewGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is FrameworkElement grid)
+        {
+            grid.Clip = new System.Windows.Media.RectangleGeometry(new Rect(e.NewSize), 8, 8);
+        }
+    }
+
     private void PreviewPlayer_MediaEnded(object sender, RoutedEventArgs e)
     {
         PreviewPlayer.Position = TimeSpan.Zero;

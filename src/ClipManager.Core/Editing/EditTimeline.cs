@@ -150,6 +150,106 @@ public sealed class EditTimeline
         return true;
     }
 
+    /// <summary>Macht in einer Spur den Bereich a–b um <paramref name="db"/> leiser (z.B. −12), mit sanftem Übergang.</summary>
+    public bool DuckTrackRange(int index, TimeSpan a, TimeSpan b, double db)
+    {
+        var range = Ordered(Clamp(a), Clamp(b));
+        if (TrackAt(index) is not { } track || range.Duration < MinSegment || !double.IsFinite(db))
+        {
+            return false;
+        }
+
+        var duck = new DuckRange(range, Math.Clamp(db, DuckRange.MinDb, -1));
+        Mutate(() => _tracks[index] = track with { Ducked = AddDuck(track.Ducked, duck) });
+        return true;
+    }
+
+    /// <summary>Index des leiser gemachten Bereichs einer Spur bei t, oder -1.</summary>
+    public int DuckRangeIndexAt(int index, TimeSpan t)
+    {
+        if (TrackAt(index) is not { } track)
+        {
+            return -1;
+        }
+
+        for (var i = 0; i < track.Ducked.Count; i++)
+        {
+            if (track.Ducked[i].Range.Contains(t))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>Macht die leiser gemachte Stelle bei t wieder normal laut.</summary>
+    public bool RemoveDuckAt(int index, TimeSpan t)
+    {
+        var i = DuckRangeIndexAt(index, t);
+        if (i < 0)
+        {
+            return false;
+        }
+
+        var track = _tracks[index];
+        Mutate(() => _tracks[index] = track with { Ducked = track.Ducked.Where((_, n) => n != i).ToList() });
+        return true;
+    }
+
+    /// <summary>Ändert, wie viel leiser die Stelle bei t ist.</summary>
+    public bool SetDuckDbAt(int index, TimeSpan t, double db)
+    {
+        var i = DuckRangeIndexAt(index, t);
+        if (i < 0 || !double.IsFinite(db))
+        {
+            return false;
+        }
+
+        var track = _tracks[index];
+        var ducked = track.Ducked.ToList();
+        ducked[i] = ducked[i] with { Db = Math.Clamp(db, DuckRange.MinDb, -1) };
+        Mutate(() => _tracks[index] = track with { Ducked = ducked });
+        return true;
+    }
+
+    /// <summary>Verschiebt Anfang oder Ende einer leiser gemachten Stelle (Rand ziehen). Gibt den neuen Wert zurück.</summary>
+    public TimeSpan? MoveDuckEdge(int index, int rangeIndex, bool start, TimeSpan to, bool recordUndo = true)
+    {
+        if (TrackAt(index) is not { } track || rangeIndex < 0 || rangeIndex >= track.Ducked.Count)
+        {
+            return null;
+        }
+
+        to = Clamp(to);
+        var old = track.Ducked[rangeIndex];
+        var range = start
+            ? old.Range with { Start = to < old.Range.End - MinSegment ? to : old.Range.End - MinSegment }
+            : old.Range with { End = to > old.Range.Start + MinSegment ? to : old.Range.Start + MinSegment };
+        var ducked = AddDuck(track.Ducked.Where((_, n) => n != rangeIndex), old with { Range = range });
+        Apply(() => _tracks[index] = track with { Ducked = ducked }, recordUndo);
+        return start ? range.Start : range.End;
+    }
+
+    /// <summary>Neue Stelle ersetzt den überlappenden Teil anderer Stellen; sortiert nach Anfang.</summary>
+    private static List<DuckRange> AddDuck(IEnumerable<DuckRange> existing, DuckRange duck)
+    {
+        var result = new List<DuckRange>();
+        foreach (var other in existing)
+        {
+            foreach (var rest in RangeSet.Subtract(new[] { other.Range }, duck.Range))
+            {
+                if (rest.Duration >= MinSegment)
+                {
+                    result.Add(other with { Range = rest });
+                }
+            }
+        }
+
+        result.Add(duck);
+        return result.OrderBy(d => d.Range.Start).ToList();
+    }
+
     /// <summary>Index des stummen Bereichs einer Spur bei t, oder -1.</summary>
     public int MutedRangeIndexAt(int index, TimeSpan t)
     {
@@ -543,6 +643,7 @@ public sealed class EditTimeline
                 Enabled = t.Enabled,
                 Volume = t.Volume,
                 Muted = t.Muted.Select(r => new[] { r.Start.TotalSeconds, r.End.TotalSeconds }).ToList(),
+                Ducked = t.Ducked.Select(d => new[] { d.Range.Start.TotalSeconds, d.Range.End.TotalSeconds, d.Db }).ToList(),
             }).ToList()
             : null,
     };
@@ -580,7 +681,17 @@ public sealed class EditTimeline
                 muted = RangeSet.Add(muted, range);
             }
 
-            _tracks[saved.Index] = new TrackEdit(saved.Index, saved.Enabled, Math.Clamp(saved.Volume, 0, TrackEdit.MaxVolume), muted);
+            var ducked = new List<DuckRange>();
+            foreach (var d in (saved.Ducked ?? new List<double[]>()).Where(d => d is { Length: 3 } && double.IsFinite(d[2])))
+            {
+                var range = Ordered(Clamp(TimeSpan.FromSeconds(d[0])), Clamp(TimeSpan.FromSeconds(d[1])));
+                if (range.Duration >= MinSegment)
+                {
+                    ducked = AddDuck(ducked, new DuckRange(range, Math.Clamp(d[2], DuckRange.MinDb, -1)));
+                }
+            }
+
+            _tracks[saved.Index] = new TrackEdit(saved.Index, saved.Enabled, Math.Clamp(saved.Volume, 0, TrackEdit.MaxVolume), muted) { Ducked = ducked };
         }
     }
 
@@ -591,11 +702,7 @@ public sealed class EditTimeline
     {
         public static readonly TrackComparer Instance = new();
 
-        public bool Equals(TrackEdit? x, TrackEdit? y) =>
-            x is not null && y is not null
-            && x.Index == y.Index && x.Enabled == y.Enabled
-            && Math.Abs(x.Volume - y.Volume) < 0.0001
-            && x.Muted.SequenceEqual(y.Muted);
+        public bool Equals(TrackEdit? x, TrackEdit? y) => x is not null && y is not null && x.SameAs(y);
 
         public int GetHashCode(TrackEdit obj) => obj.Index;
     }

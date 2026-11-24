@@ -100,7 +100,7 @@
                     MouseLeftButtonDown="DragCard_MouseLeftButtonDown"
                     MouseMove="DragCard_MouseMove"
                     ToolTip="Anfassen und z.B. in Discord ziehen">
-                    <Grid Height="290">
+                    <Grid Height="290" SizeChanged="PreviewGrid_SizeChanged">
                         <MediaElement
                             x:Name="PreviewPlayer"
                             IsHitTestVisible="False"
@@ -153,7 +153,7 @@
                                             Margin="6,0,0,0"
                                             FontWeight="SemiBold"
                                             Foreground="White"
-                                            Text="Anfassen &amp; reinziehen" />
+                                            Text="Drag &amp; Drop" />
                                     </StackPanel>
                                 </Border>
                                 <StackPanel VerticalAlignment="Center">

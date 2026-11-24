@@ -59,6 +59,11 @@ public partial class EditorView : System.Windows.Controls.UserControl
         TimelineView.ScrubbingChanged += Timeline_ScrubbingChanged;
         TimelineView.RangeSelected += (_, e) => ShowRangeMenu(e.Track, e.Start, e.End);
         TimelineView.MutedClicked += (_, e) => ShowMenu(("Wieder laut machen", Wpf.Ui.Controls.SymbolRegular.Speaker224, () => _timeline?.UnmuteTrackAt(e.Track, e.Time)));
+        TimelineView.DuckClicked += (_, e) => ShowMenu(
+            ("Wieder normal laut", Wpf.Ui.Controls.SymbolRegular.Speaker224, () => _timeline?.RemoveDuckAt(e.Track, e.Time)),
+            ("Etwas leiser (−6 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker124, () => _timeline?.SetDuckDbAt(e.Track, e.Time, -6)),
+            ("Leiser (−12 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker124, () => _timeline?.SetDuckDbAt(e.Track, e.Time, -12)),
+            ("Viel leiser (−20 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker024, () => _timeline?.SetDuckDbAt(e.Track, e.Time, -20)));
         TimelineView.RemovedClicked += (_, t) => ShowMenu(("Wieder reinnehmen", Wpf.Ui.Controls.SymbolRegular.ArrowUndo24, () => _timeline?.RestoreAt(t)));
 
         Player.Volume = VolumeSlider.Value;
@@ -822,6 +827,9 @@ public partial class EditorView : System.Windows.Controls.UserControl
         var length = TimeText.Format(end - start);
         ShowMenu(
             ($"Nur in \"{name}\" stumm schalten ({length})", Wpf.Ui.Controls.SymbolRegular.SpeakerMute24, () => _timeline?.MuteTrackRange(track, start, end)),
+            ($"\"{name}\" etwas leiser (−6 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker124, () => _timeline?.DuckTrackRange(track, start, end, -6)),
+            ($"\"{name}\" leiser (−12 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker124, () => _timeline?.DuckTrackRange(track, start, end, -12)),
+            ($"\"{name}\" viel leiser (−20 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker024, () => _timeline?.DuckTrackRange(track, start, end, -20)),
             ($"Aus dem ganzen Clip rausschneiden ({length})", Wpf.Ui.Controls.SymbolRegular.Cut24, () => _timeline?.RemoveRange(start, end)),
             ("Ab hier abspielen", Wpf.Ui.Controls.SymbolRegular.Play24, () =>
             {

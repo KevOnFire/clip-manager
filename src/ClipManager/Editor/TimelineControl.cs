@@ -31,6 +31,11 @@ public sealed class TimelineControl : FrameworkElement
     private const double GrabDistance = 9;
     private const double EdgeGrab = 6;
 
+    // Leiser gemachte Stellen: blau getönt, Linie zeigt den Lautstärke-Verlauf (oben = normal, tiefer = leiser).
+    private static readonly Brush LaneDuckBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x70, 0x20, 0x40, 0x90)));
+    private static readonly Pen DuckLinePen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0x6C, 0xB4, 0xFF)), 2));
+    private static readonly Brush DuckGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x6C, 0xB4, 0xFF)));
+    private static readonly Brush DuckTextBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xCF, 0xE6, 0xFF)));
     private static readonly Brush MutedGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xE8, 0x40, 0x4C)));
     private static readonly Brush RemovedGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0)));
     private static readonly Pen GripOutlinePen = Frozen(new Pen(new SolidColorBrush(Color.FromArgb(0xC0, 0x10, 0x10, 0x10)), 1));
@@ -86,6 +91,7 @@ public sealed class TimelineControl : FrameworkElement
         LaneSelect,
         SplitEdge,
         MutedEdge,
+        DuckEdge,
     }
 
     /// <summary>Der Nutzer hat auf der Zeitleiste geklickt oder gezogen.</summary>
@@ -120,6 +126,9 @@ public sealed class TimelineControl : FrameworkElement
 
     /// <summary>Klick auf einen stummen Bereich einer Spur.</summary>
     public event EventHandler<(int Track, TimeSpan Time)>? MutedClicked;
+
+    /// <summary>Klick auf eine leiser gemachte Stelle einer Spur.</summary>
+    public event EventHandler<(int Track, TimeSpan Time)>? DuckClicked;
 
     /// <summary>Klick auf einen rausgeschnittenen Teil.</summary>
     public event EventHandler<TimeSpan>? RemovedClicked;
@@ -327,6 +336,15 @@ public sealed class TimelineControl : FrameworkElement
             _dragStart = edge.Start;
             _timeline.BeginChange();
         }
+        else if (lane is { } duckTrack && DuckEdgeAt(duckTrack, x) is { } duckEdge)
+        {
+            // Rand einer leiser gemachten Stelle ziehen
+            _drag = DragMode.DuckEdge;
+            _dragTrack = duckTrack;
+            _dragRange = duckEdge.Range;
+            _dragStart = duckEdge.Start;
+            _timeline.BeginChange();
+        }
         else if (RemovedEdgeAt(x) is { } split)
         {
             // Rand eines rausgeschnittenen Teils ziehen (in Spur oder oben)
@@ -428,6 +446,24 @@ public sealed class TimelineControl : FrameworkElement
                 }
 
                 return;
+
+            case DragMode.DuckEdge:
+                if (_timeline.MoveDuckEdge(_dragTrack, _dragRange, _dragStart, t, recordUndo: false) is { } duckEdge)
+                {
+                    var ducked = _timeline.Tracks[_dragTrack].Ducked;
+                    for (var i = 0; i < ducked.Count; i++)
+                    {
+                        if ((_dragStart ? ducked[i].Range.Start : ducked[i].Range.End) == duckEdge)
+                        {
+                            _dragRange = i;
+                            break;
+                        }
+                    }
+
+                    SeekRequested?.Invoke(this, duckEdge);
+                }
+
+                return;
         }
 
         // Anfang/Ende beim Ziehen nur in der Vorschau verschieben, übernommen wird beim Loslassen
@@ -488,6 +524,7 @@ public sealed class TimelineControl : FrameworkElement
                 break;
             case DragMode.SplitEdge:
             case DragMode.MutedEdge:
+            case DragMode.DuckEdge:
                 if (!_moved)
                 {
                     // Nur geklickt, nichts verschoben: den leeren Rückgängig-Schritt wieder weg.
@@ -495,6 +532,10 @@ public sealed class TimelineControl : FrameworkElement
                     if (mode == DragMode.MutedEdge)
                     {
                         MutedClicked?.Invoke(this, (_dragTrack, t));
+                    }
+                    else if (mode == DragMode.DuckEdge)
+                    {
+                        DuckClicked?.Invoke(this, (_dragTrack, t));
                     }
                     else if (_timeline?.SegmentAt(t) is { Removed: true })
                     {
@@ -536,6 +577,10 @@ public sealed class TimelineControl : FrameworkElement
                 {
                     MutedClicked?.Invoke(this, (track, t));
                 }
+                else if (_timeline?.DuckRangeIndexAt(track, t) >= 0)
+                {
+                    DuckClicked?.Invoke(this, (track, t));
+                }
                 else if (_timeline?.SegmentAt(t) is { Removed: true })
                 {
                     RemovedClicked?.Invoke(this, t);
@@ -559,7 +604,7 @@ public sealed class TimelineControl : FrameworkElement
     private Cursor HoverCursor(Point point)
     {
         var lane = LaneAt(point.Y);
-        if ((lane is { } track && MutedEdgeAt(track, point.X) != null) || RemovedEdgeAt(point.X) != null)
+        if ((lane is { } track && (MutedEdgeAt(track, point.X) != null || DuckEdgeAt(track, point.X) != null)) || RemovedEdgeAt(point.X) != null)
         {
             return Cursors.SizeWE;
         }
@@ -570,6 +615,31 @@ public sealed class TimelineControl : FrameworkElement
         }
 
         return HitTest(point.X) == DragMode.Playhead ? Cursors.Hand : Cursors.SizeWE;
+    }
+
+    /// <summary>Rand einer leiser gemachten Stelle in einer Spur unter x (Bereich-Nummer, Anfang/Ende).</summary>
+    private (int Range, bool Start)? DuckEdgeAt(int track, double x)
+    {
+        if (_timeline is not { } tl || track >= tl.Tracks.Count || !tl.Tracks[track].Enabled)
+        {
+            return null;
+        }
+
+        var ducked = tl.Tracks[track].Ducked;
+        for (var i = 0; i < ducked.Count; i++)
+        {
+            if (Math.Abs(x - X(ducked[i].Range.Start)) <= EdgeGrab)
+            {
+                return (i, true);
+            }
+
+            if (Math.Abs(x - X(ducked[i].Range.End)) <= EdgeGrab)
+            {
+                return (i, false);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Rand eines stummen Bereichs in einer Spur unter x (Bereich-Nummer, Anfang/Ende).</summary>
@@ -671,6 +741,66 @@ public sealed class TimelineControl : FrameworkElement
         }
     }
 
+    /// <summary>
+    /// Leiser gemachte Stelle: Fläche blau getönt, darüber die Lautstärke als Linie (fällt am Anfang sanft ab,
+    /// steigt am Ende wieder an), Griffe an den Rändern und die Absenkung in dB.
+    /// </summary>
+    private void DrawDuck(DrawingContext dc, DuckRange duck, Rect lane, Rect strip)
+    {
+        var startX = X(duck.Range.Start);
+        var endX = X(duck.Range.End);
+        var left = Math.Max(startX, strip.Left);
+        var right = Math.Min(endX, strip.Right);
+        if (right <= left)
+        {
+            return;
+        }
+
+        dc.DrawRectangle(LaneDuckBrush, null, new Rect(left, lane.Top, right - left, lane.Height));
+
+        // Linie: oben = normal laut, je leiser desto tiefer (−40 dB = ganz unten)
+        var top = lane.Top + 3;
+        var depth = Math.Clamp(-duck.Db / -DuckRange.MinDb, 0.1, 1) * (lane.Height - 6);
+        var low = top + depth;
+        var fadePx = Math.Max(1, X(duck.Range.Start + TimeSpan.FromSeconds(duck.Fade)) - startX);
+        var geometry = new StreamGeometry();
+        using (var ctx = geometry.Open())
+        {
+            ctx.BeginFigure(new Point(startX, top), false, false);
+            ctx.LineTo(new Point(startX + fadePx, low), true, true);
+            ctx.LineTo(new Point(endX - fadePx, low), true, true);
+            ctx.LineTo(new Point(endX, top), true, true);
+        }
+
+        geometry.Freeze();
+        dc.PushClip(new RectangleGeometry(new Rect(left, lane.Top, right - left, lane.Height)));
+        dc.DrawGeometry(null, DuckLinePen, geometry);
+        dc.Pop();
+
+        if (right - left > 40)
+        {
+            var text = new FormattedText(
+                $"{duck.Db:0} dB",
+                CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                Font,
+                10,
+                DuckTextBrush,
+                VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            dc.DrawText(text, new Point(left + Math.Max(fadePx, 4) + 2, Math.Min(low + 1, lane.Bottom - text.Height)));
+        }
+
+        if (startX >= strip.Left)
+        {
+            DrawEdgeGrip(dc, startX, lane.Top, lane.Height, DuckGripBrush);
+        }
+
+        if (endX <= strip.Right)
+        {
+            DrawEdgeGrip(dc, endX, lane.Top, lane.Height, DuckGripBrush);
+        }
+    }
+
     private double X(TimeSpan t) =>
         _timeline is { Duration.TotalSeconds: > 0 } tl
             ? Pad + t.TotalSeconds / tl.Duration.TotalSeconds * Math.Max(0, ActualWidth - 2 * Pad)
@@ -733,6 +863,11 @@ public sealed class TimelineControl : FrameworkElement
 
             if (track.Enabled)
             {
+                foreach (var duck in track.Ducked)
+                {
+                    DrawDuck(dc, duck, lane, strip);
+                }
+
                 foreach (var muted in track.Muted)
                 {
                     var start = Math.Max(X(muted.Start), strip.Left);
