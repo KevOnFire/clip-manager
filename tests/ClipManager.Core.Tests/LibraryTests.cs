@@ -156,4 +156,24 @@ public class LibraryTests
     {
         Assert.Equal(ok, ClipFileOps.ValidateName(name) == null);
     }
+
+    [Theory]
+    [InlineData(1560, 312, 5, 25)] // 5 Spalten
+    [InlineData(1559, 312, 5, 20)] // knapp zu schmal für 5
+    [InlineData(1300, 312, 5, 20)]
+    [InlineData(100, 312, 5, 5)]   // schmaler als eine Kachel: trotzdem eine Spalte
+    [InlineData(0, 312, 5, 5)]
+    public void SeitengroesseFuelltReihen(double width, double slot, int rows, int expected)
+    {
+        Assert.Equal(expected, LibraryQuery.PageSizeFor(width, slot, rows));
+    }
+
+    [Fact]
+    public void SeiteNachGroessenaenderung_BehaeltErstenClip()
+    {
+        // Seite 3 mit 25 = Clips ab 75; mit 20 pro Seite liegt Clip 75 auf Seite 3 (60–79).
+        Assert.Equal(3, LibraryQuery.PageAfterResize(3, 25, 20));
+        Assert.Equal(0, LibraryQuery.PageAfterResize(0, 25, 30));
+        Assert.Equal(2, LibraryQuery.PageAfterResize(3, 20, 25));
+    }
 }

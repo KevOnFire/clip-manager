@@ -80,6 +80,20 @@ public static class LibraryQuery
         return query.ToList();
     }
 
+    /// <summary>
+    /// Clips pro Seite, so dass jede Reihe voll ist: Spalten (aus Breite und Kachelbreite inkl. Abstand)
+    /// mal Reihen. Mindestens eine Spalte.
+    /// </summary>
+    public static int PageSizeFor(double availableWidth, double tileSlotWidth, int rows)
+    {
+        var columns = tileSlotWidth > 0 && availableWidth > 0 ? (int)Math.Floor(availableWidth / tileSlotWidth) : 1;
+        return Math.Max(1, columns) * Math.Max(1, rows);
+    }
+
+    /// <summary>Seite, auf der der erste Clip der alten Seite nach dem Ändern der Seitengröße landet.</summary>
+    public static int PageAfterResize(int page, int oldPageSize, int newPageSize) =>
+        newPageSize <= 0 ? 0 : Math.Max(0, page) * Math.Max(1, oldPageSize) / newPageSize;
+
     public static int PageCount(int total, int pageSize) =>
         Math.Max(1, (total + pageSize - 1) / pageSize);
 
