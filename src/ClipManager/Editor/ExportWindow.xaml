@@ -87,35 +87,89 @@
                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                     TextWrapping="Wrap" />
 
-                <!-- Zum Rausziehen -->
+                <!-- Zum Rausziehen: Vorschau des fertigen Clips, die ganze Fläche kann man anfassen -->
                 <Border
                     x:Name="DragCard"
                     Margin="0,14,0,0"
-                    Padding="14"
-                    Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                    Background="Black"
                     BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
-                    BorderThickness="1"
-                    Cursor="Hand"
-                    CornerRadius="8"
+                    BorderThickness="2"
+                    ClipToBounds="True"
+                    Cursor="SizeAll"
+                    CornerRadius="10"
                     MouseLeftButtonDown="DragCard_MouseLeftButtonDown"
                     MouseMove="DragCard_MouseMove"
                     ToolTip="Anfassen und z.B. in Discord ziehen">
-                    <DockPanel>
-                        <ui:SymbolIcon
-                            Margin="0,0,12,0"
-                            FontSize="32"
-                            Symbol="VideoClip24" />
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock
-                                x:Name="FileNameText"
-                                FontWeight="SemiBold"
-                                TextTrimming="CharacterEllipsis" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                Text="Hier anfassen und in Discord reinziehen" />
-                        </StackPanel>
-                    </DockPanel>
+                    <Grid Height="290">
+                        <MediaElement
+                            x:Name="PreviewPlayer"
+                            IsHitTestVisible="False"
+                            IsMuted="True"
+                            LoadedBehavior="Manual"
+                            MediaEnded="PreviewPlayer_MediaEnded"
+                            Stretch="Uniform"
+                            UnloadedBehavior="Close" />
+
+                        <!-- Ton an/aus oben rechts -->
+                        <Button
+                            x:Name="PreviewSoundButton"
+                            Width="36"
+                            Height="36"
+                            Margin="10"
+                            Padding="0"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Background="#99000000"
+                            BorderThickness="0"
+                            Click="PreviewSound_Click"
+                            Cursor="Hand"
+                            ToolTip="Ton an/aus">
+                            <ui:SymbolIcon
+                                x:Name="PreviewSoundIcon"
+                                FontSize="18"
+                                Foreground="White"
+                                Symbol="SpeakerMute24" />
+                        </Button>
+
+                        <!-- Unten: Dateiname und Hinweis -->
+                        <Border VerticalAlignment="Bottom" Padding="14,24,14,12" IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Offset="0" Color="#00000000" />
+                                    <GradientStop Offset="1" Color="#E0000000" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <DockPanel>
+                                <Border
+                                    Margin="0,0,12,0"
+                                    Padding="10,6"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                    CornerRadius="16"
+                                    DockPanel.Dock="Right">
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:SymbolIcon FontSize="16" Foreground="White" Symbol="HandDraw24" />
+                                        <TextBlock
+                                            Margin="6,0,0,0"
+                                            FontWeight="SemiBold"
+                                            Foreground="White"
+                                            Text="Anfassen &amp; reinziehen" />
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock
+                                        x:Name="FileNameText"
+                                        FontWeight="SemiBold"
+                                        Foreground="White"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        FontSize="12"
+                                        Foreground="#CCFFFFFF"
+                                        Text="Einfach in Discord, den Explorer oder WhatsApp Web ziehen" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
                 </Border>
 
                 <WrapPanel Margin="0,14,0,0">
