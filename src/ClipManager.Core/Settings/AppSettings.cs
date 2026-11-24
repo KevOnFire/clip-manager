@@ -42,6 +42,24 @@ public sealed class AppSettings
     /// <summary>Auch Unterordner der Clip-Ordner nach Clips durchsuchen.</summary>
     public bool ScanSubfolders { get; set; } = true;
 
+    /// <summary>
+    /// Welche Spuren beim Öffnen eines Clips an sind (Index ab 0). Fehlt eine Spur hier, gilt die
+    /// Standardregel: Spur 1 (Mix) aus, wenn es Einzelspuren gibt, sonst alles an.
+    /// </summary>
+    public Dictionary<int, bool> TrackEnabledByDefault { get; set; } = new();
+
+    /// <summary>Spuren, die bei einem Clip mit trackCount Spuren am Anfang an sind.</summary>
+    public IReadOnlyList<int> EnabledTracksFor(int trackCount)
+    {
+        var rule = Export.ExportPlanner.DefaultAudioTracks(trackCount);
+        var result = Enumerable.Range(0, Math.Max(0, trackCount))
+            .Where(i => TrackEnabledByDefault.TryGetValue(i, out var on) ? on : rule.Contains(i))
+            .ToList();
+
+        // Nie ganz ohne Ton starten (z.B. Clip mit nur einer Spur, die sonst aus wäre).
+        return result.Count > 0 ? result : rule;
+    }
+
     /// <summary>Eigene Farben für Tonspuren (Index ab 0) als "#RRGGBB". Fehlt eine, gilt die Standardfarbe.</summary>
     public Dictionary<int, string> TrackColors { get; set; } = new();
 

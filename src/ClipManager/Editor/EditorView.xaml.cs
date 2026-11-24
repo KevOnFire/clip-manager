@@ -79,6 +79,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
     private bool _closed;
     private bool _seekDragging;
     private bool _updatingSeek;
+    private bool _resumeAfterSeek;
 
     /// <summary>Der Clip, der gerade bearbeitet wird.</summary>
     public string ClipPath => _clip.Path;
@@ -124,7 +125,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         }
 
         var trackCount = _info?.AudioTracks.Count ?? 0;
-        _timeline.InitTracks(trackCount, Core.Export.ExportPlanner.DefaultAudioTracks(trackCount));
+        _timeline.InitTracks(trackCount, App.Settings.EnabledTracksFor(trackCount));
         try
         {
             if (App.Db.GetEdit(_clip.Path) is { } saved)
@@ -315,10 +316,10 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
             // Ton der Spuren am Bild ausrichten, wenn sie auseinanderlaufen.
             if (_audio != null && DateTime.UtcNow - _lastAudioSync > TimeSpan.FromMilliseconds(700)
-                && DateTime.UtcNow - _lastSeekAt > TimeSpan.FromMilliseconds(400))
+                && DateTime.UtcNow - _lastSeekAt > TimeSpan.FromMilliseconds(800))
             {
                 var drift = (_audio.Position - pos).Duration();
-                if (drift > TimeSpan.FromMilliseconds(120))
+                if (drift > TimeSpan.FromMilliseconds(150))
                 {
                     _audio.Play(pos);
                 }
@@ -349,7 +350,10 @@ public partial class EditorView : System.Windows.Controls.UserControl
             Player.IsMuted = UsesTrackAudio;
             Player.Play();
             _audio?.Play(Position);
+            // Der Windows-Player braucht nach dem Start oder einem Sprung etwas, bis seine Position
+            // wieder läuft. So lange nicht nachziehen, sonst springt der Ton zurück und man hört Stellen doppelt.
             _lastAudioSync = DateTime.UtcNow;
+            _lastSeekAt = DateTime.UtcNow;
         }
         else
         {
@@ -627,30 +631,61 @@ public partial class EditorView : System.Windows.Controls.UserControl
         _updatingSeek = false;
     }
 
-    private void SeekSlider_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) => _seekDragging = true;
-
-    private void SeekSlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    // Spul-Leiste im Vollbild: klicken springt dorthin, gedrückt halten und ziehen spult mit.
+    private void SeekSlider_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        _seekDragging = false;
-        Seek(TimeSpan.FromSeconds(SeekSlider.Value));
-    }
-
-    private void SeekSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_updatingSeek || _timeline == null)
+        if (_timeline == null)
         {
             return;
         }
 
-        // Klick auf die Leiste oder Ziehen: hinspringen (beim Ziehen nur das Bild, Ton beim Loslassen)
-        if (_seekDragging)
+        _seekDragging = true;
+        _resumeAfterSeek = _playing;
+        SetPlaying(false);
+        SeekSlider.CaptureMouse();
+        ScrubTo(SeekValueAt(e.GetPosition(SeekSlider).X));
+        e.Handled = true;
+    }
+
+    private void SeekSlider_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_seekDragging)
         {
-            ScrubTo(TimeSpan.FromSeconds(e.NewValue));
+            return;
         }
-        else
+
+        ScrubTo(SeekValueAt(e.GetPosition(SeekSlider).X));
+        e.Handled = true;
+    }
+
+    private void SeekSlider_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_seekDragging)
         {
-            Seek(TimeSpan.FromSeconds(e.NewValue));
+            return;
         }
+
+        _seekDragging = false;
+        SeekSlider.ReleaseMouseCapture();
+        var t = SeekValueAt(e.GetPosition(SeekSlider).X);
+        _pendingSeek = null;
+        Seek(t);
+        if (_resumeAfterSeek)
+        {
+            SetPlaying(true);
+        }
+
+        e.Handled = true;
+    }
+
+    private TimeSpan SeekValueAt(double x)
+    {
+        var width = Math.Max(1, SeekSlider.ActualWidth);
+        var fraction = Math.Clamp(x / width, 0, 1);
+        _updatingSeek = true;
+        SeekSlider.Value = fraction * SeekSlider.Maximum;
+        _updatingSeek = false;
+        return TimeSpan.FromSeconds(fraction * (_timeline?.Duration.TotalSeconds ?? 0));
     }
 
     private void PlayButton_Click(object sender, RoutedEventArgs e) => TogglePlay();
@@ -738,7 +773,8 @@ public partial class EditorView : System.Windows.Controls.UserControl
         menu.IsOpen = true;
     }
 
-    private void TrackVolume_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) =>
+    // Vor dem Klicken/Ziehen am Regler einen Rückgängig-Schritt merken.
+    private void TrackVolume_MouseDown(object sender, MouseButtonEventArgs e) =>
         _timeline?.BeginTrackVolumeChange();
 
     private async void TrackName_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -775,7 +811,23 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
     private void Save_Click(object sender, RoutedEventArgs e) => OpenExport(saveMode: true);
 
-    private void OpenExport(bool saveMode)
+    private async void QuickSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (_timeline == null)
+        {
+            return;
+        }
+
+        if (!_timeline.IsEdited)
+        {
+            await Dialogs.ErrorAsync("Der Clip ist noch nicht geschnitten, es gibt nichts zu speichern.");
+            return;
+        }
+
+        OpenExport(saveMode: true, quickReplace: true);
+    }
+
+    private void OpenExport(bool saveMode, bool quickReplace = false)
     {
         if (_timeline == null)
         {
@@ -783,7 +835,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         }
 
         SetPlaying(false);
-        var dialog = new ExportWindow(_clip, _info, _timeline, saveMode, this) { Owner = Window.GetWindow(this) };
+        var dialog = new ExportWindow(_clip, _info, _timeline, saveMode, this, quickReplace) { Owner = Window.GetWindow(this) };
         dialog.ShowDialog();
         if (dialog.OriginalReplaced)
         {

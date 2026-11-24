@@ -129,7 +129,7 @@
             <Border Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Style="{StaticResource CardTitle}" Text="Tonspuren" />
-                    <TextBlock Style="{StaticResource Hint}" Text="So heißen die Spuren im Editor bei jedem Clip, und in dieser Farbe wird ihre Wellenform gezeichnet. Z.B. Spur 1 = Alles, Spur 2 = Spiel, Spur 3 = Mikro. Leer lassen = &quot;Spur N&quot;. Auf das Farbfeld klicken, um die Farbe zu ändern." />
+                    <TextBlock Style="{StaticResource Hint}" Text="So heißen die Spuren im Editor bei jedem Clip, und in dieser Farbe wird ihre Wellenform gezeichnet. Mit dem Haken legst du fest, welche Spuren beim Öffnen eines Clips an sind. Z.B. Spur 1 = Alles, Spur 2 = Spiel, Spur 3 = Mikro. Leer lassen = &quot;Spur N&quot;. Auf das Farbfeld klicken, um die Farbe zu ändern." />
                     <ItemsControl x:Name="TrackNameList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -169,6 +169,14 @@
                                         Icon="{ui:SymbolIcon Dismiss24}"
                                         ToolTip="Letzte Spur entfernen"
                                         Visibility="{Binding RemoveVisibility}" />
+                                    <CheckBox
+                                        Margin="12,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Click="TrackEnabled_Click"
+                                        Content="Standardmäßig an"
+                                        DockPanel.Dock="Right"
+                                        IsChecked="{Binding Enabled}"
+                                        ToolTip="Ist diese Spur beim Öffnen eines Clips angehakt (im Export)?" />
                                     <ui:TextBox
                                         LostFocus="TrackName_LostFocus"
                                         PlaceholderText="{Binding Placeholder}"

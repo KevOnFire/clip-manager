@@ -152,3 +152,22 @@ public class TrackColorTests
         }
     }
 }
+
+public class TrackDefaultTests
+{
+    [Fact]
+    public void EnabledTracksFor_RuleAndOwnChoice()
+    {
+        var s = new AppSettings();
+        Assert.Equal(new[] { 1, 2, 3, 4 }, s.EnabledTracksFor(5));
+        Assert.Equal(new[] { 0 }, s.EnabledTracksFor(1));
+
+        // Spotify (Spur 5) standardmäßig aus, Mix bleibt aus
+        s.TrackEnabledByDefault[4] = false;
+        s.TrackEnabledByDefault[0] = false;
+        Assert.Equal(new[] { 1, 2, 3 }, s.EnabledTracksFor(5));
+
+        // Clip mit nur einer Spur: nie ganz stumm
+        Assert.Equal(new[] { 0 }, s.EnabledTracksFor(1));
+    }
+}
