@@ -27,348 +27,452 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         </Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        </Style>
+        <Style x:Key="SectionHint" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,2,0,16" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="210" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Logo groß und dunkel mittig im Hintergrund (wie in der Bibliothek) -->
+        <Image
+            Grid.ColumnSpan="2"
+            Margin="40"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            IsHitTestVisible="False"
+            Opacity="0.35"
+            RenderOptions.BitmapScalingMode="HighQuality"
+            Source="pack://application:,,,/Assets/clippy-silhouette.png"
+            Stretch="Uniform" />
+
+        <!-- Links: Bereiche -->
+        <DockPanel Margin="0,0,20,0">
             <TextBlock
-                Margin="0,0,0,16"
+                Margin="4,0,0,16"
+                DockPanel.Dock="Top"
                 FontSize="28"
                 FontWeight="SemiBold"
                 Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                 Text="Einstellungen" />
-
-            <!-- Clip-Ordner -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource CardTitle}" Text="Clip-Ordner" />
-                    <TextBlock Style="{StaticResource Hint}" Text="Hier sucht das Programm nach deinen Clips." />
-                    <ListBox
-                        x:Name="FolderList"
-                        MinHeight="60"
-                        MaxHeight="220" />
-                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
-                        <ui:Button
-                            Margin="0,0,8,0"
-                            Appearance="Primary"
-                            Click="AddFolder_Click"
-                            Content="Ordner hinzufügen"
-                            Icon="{ui:SymbolIcon FolderAdd24}" />
-                        <ui:Button
-                            Click="RemoveFolder_Click"
-                            Content="Entfernen"
-                            Icon="{ui:SymbolIcon Delete24}" />
+            <ListBox
+                x:Name="SectionList"
+                VerticalAlignment="Top"
+                Background="Transparent"
+                BorderThickness="0"
+                SelectionChanged="SectionList_SelectionChanged">
+                <ListBoxItem Tag="SecGeneral">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Margin="0,0,10,0" FontSize="18" Symbol="Folder24" />
+                        <TextBlock VerticalAlignment="Center" FontSize="14" Text="Allgemein" />
                     </StackPanel>
-                    <ui:ToggleSwitch
-                        x:Name="SubfoldersSwitch"
-                        Margin="0,14,0,0"
-                        Checked="SubfoldersSwitch_Changed"
-                        Content="Unterordner mit durchsuchen"
-                        Unchecked="SubfoldersSwitch_Changed" />
-                    <ui:ToggleSwitch
-                        x:Name="VideoColorsSwitch"
-                        Margin="0,10,0,0"
-                        Checked="VideoColorsSwitch_Changed"
-                        Content="Kräftigere Farben im Player (aus, falls das Bild zu dunkel wirkt)"
-                        Unchecked="VideoColorsSwitch_Changed" />
+                </ListBoxItem>
+                <ListBoxItem Tag="SecExport">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Margin="0,0,10,0" FontSize="18" Symbol="ArrowExportUp24" />
+                        <TextBlock VerticalAlignment="Center" FontSize="14" Text="Export" />
+                    </StackPanel>
+                </ListBoxItem>
+                <ListBoxItem Tag="SecTracks">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Margin="0,0,10,0" FontSize="18" Symbol="MusicNote224" />
+                        <TextBlock VerticalAlignment="Center" FontSize="14" Text="Tonspuren" />
+                    </StackPanel>
+                </ListBoxItem>
+                <ListBoxItem Tag="SecDesign">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Margin="0,0,10,0" FontSize="18" Symbol="Color24" />
+                        <TextBlock VerticalAlignment="Center" FontSize="14" Text="Design" />
+                    </StackPanel>
+                </ListBoxItem>
+                <ListBoxItem Tag="SecApp">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Margin="0,0,10,0" FontSize="18" Symbol="Info24" />
+                        <TextBlock VerticalAlignment="Center" FontSize="14" Text="Programm" />
+                    </StackPanel>
+                </ListBoxItem>
+            </ListBox>
+        </DockPanel>
+
+        <!-- Rechts: Inhalt des gewählten Bereichs -->
+        <ScrollViewer x:Name="SectionScroller" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="760" Margin="0,0,12,0" HorizontalAlignment="Left">
+                <!-- Allgemein -->
+                <StackPanel x:Name="SecGeneral" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="Allgemein" />
+                    <TextBlock Style="{StaticResource SectionHint}" Text="Wo deine Clips liegen und wie sie angezeigt werden." />
+                    <!-- Clip-Ordner -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Clip-Ordner" />
+                            <TextBlock Style="{StaticResource Hint}" Text="Hier sucht das Programm nach deinen Clips." />
+                            <ListBox
+                                x:Name="FolderList"
+                                MinHeight="60"
+                                MaxHeight="220" />
+                            <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                                <ui:Button
+                                    Margin="0,0,8,0"
+                                    Appearance="Primary"
+                                    Click="AddFolder_Click"
+                                    Content="Ordner hinzufügen"
+                                    Icon="{ui:SymbolIcon FolderAdd24}" />
+                                <ui:Button
+                                    Click="RemoveFolder_Click"
+                                    Content="Entfernen"
+                                    Icon="{ui:SymbolIcon Delete24}" />
+                            </StackPanel>
+                            <ui:ToggleSwitch
+                                x:Name="SubfoldersSwitch"
+                                Margin="0,14,0,0"
+                                Checked="SubfoldersSwitch_Changed"
+                                Content="Unterordner mit durchsuchen"
+                                Unchecked="SubfoldersSwitch_Changed" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Player -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Player" />
+                            <TextBlock Style="{StaticResource Hint}" Text="Wie Clips im Editor angezeigt werden." />
+                            <ui:ToggleSwitch
+                                x:Name="VideoColorsSwitch"
+                                Checked="VideoColorsSwitch_Changed"
+                                Content="Kräftigere Farben im Player (aus, falls das Bild zu dunkel wirkt)"
+                                Unchecked="VideoColorsSwitch_Changed" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </Border>
 
-            <!-- Discord -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource CardTitle}" Text="Discord" />
-                    <TextBlock Style="{StaticResource Hint}" Text="Deine Stufe ist beim Export vorausgewählt. Falls Discord die Limits ändert, kannst du sie hier anpassen." />
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                <!-- Export -->
+                <StackPanel x:Name="SecExport" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="Export" />
+                    <TextBlock Style="{StaticResource SectionHint}" Text="Wie groß Clips für Discord werden dürfen und wo fertige Exporte landen." />
+                    <!-- Discord -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Discord" />
+                            <TextBlock Style="{StaticResource Hint}" Text="Deine Stufe ist beim Export vorausgewählt. Falls Discord die Limits ändert, kannst du sie hier anpassen." />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-                        <TextBlock Style="{StaticResource Label}" Text="Ich habe" />
-                        <ComboBox
-                            x:Name="TierCombo"
-                            Grid.Column="1"
-                            Width="260"
-                            HorizontalAlignment="Left"
-                            SelectionChanged="TierCombo_SelectionChanged" />
+                                <TextBlock Style="{StaticResource Label}" Text="Ich habe" />
+                                <ComboBox
+                                    x:Name="TierCombo"
+                                    Grid.Column="1"
+                                    Width="260"
+                                    HorizontalAlignment="Left"
+                                    SelectionChanged="TierCombo_SelectionChanged" />
 
-                        <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource Label}" Text="Limit ohne Nitro (MB)" />
-                        <TextBox
-                            x:Name="FreeLimitBox"
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            Width="120"
-                            Margin="0,12,0,0"
-                            HorizontalAlignment="Left"
-                            LostFocus="LimitBox_LostFocus" />
+                                <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource Label}" Text="Limit ohne Nitro (MB)" />
+                                <TextBox
+                                    x:Name="FreeLimitBox"
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Width="120"
+                                    Margin="0,12,0,0"
+                                    HorizontalAlignment="Left"
+                                    LostFocus="LimitBox_LostFocus" />
 
-                        <TextBlock Grid.Row="2" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Limit Nitro Basic (MB)" />
-                        <TextBox
-                            x:Name="BasicLimitBox"
-                            Grid.Row="2"
-                            Grid.Column="1"
-                            Width="120"
-                            Margin="0,8,0,0"
-                            HorizontalAlignment="Left"
-                            LostFocus="LimitBox_LostFocus" />
+                                <TextBlock Grid.Row="2" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Limit Nitro Basic (MB)" />
+                                <TextBox
+                                    x:Name="BasicLimitBox"
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    Width="120"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    LostFocus="LimitBox_LostFocus" />
 
-                        <TextBlock Grid.Row="3" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Limit Nitro (MB)" />
-                        <TextBox
-                            x:Name="NitroLimitBox"
-                            Grid.Row="3"
-                            Grid.Column="1"
-                            Width="120"
-                            Margin="0,8,0,0"
-                            HorizontalAlignment="Left"
-                            LostFocus="LimitBox_LostFocus" />
-                    </Grid>
+                                <TextBlock Grid.Row="3" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Limit Nitro (MB)" />
+                                <TextBox
+                                    x:Name="NitroLimitBox"
+                                    Grid.Row="3"
+                                    Grid.Column="1"
+                                    Width="120"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    LostFocus="LimitBox_LostFocus" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Export-Ordner -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Export-Ordner" />
+                            <TextBlock Style="{StaticResource Hint}" Text="Hier landen fertig komprimierte Clips. Clips in diesem Ordner tauchen nicht in der Bibliothek auf." />
+                            <TextBlock
+                                x:Name="ExportFolderText"
+                                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                TextTrimming="CharacterEllipsis" />
+                            <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                                <ui:Button
+                                    Margin="0,0,8,0"
+                                    Click="ChangeExportFolder_Click"
+                                    Content="Ändern"
+                                    Icon="{ui:SymbolIcon Folder24}" />
+                                <ui:Button
+                                    Margin="0,0,8,0"
+                                    Click="OpenExportFolder_Click"
+                                    Content="Öffnen"
+                                    Icon="{ui:SymbolIcon Open24}" />
+                                <ui:Button
+                                    x:Name="ResetExportFolderButton"
+                                    Click="ResetExportFolder_Click"
+                                    Content="Standard"
+                                    Icon="{ui:SymbolIcon ArrowReset24}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </Border>
 
-            <!-- Tonspur-Namen -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource CardTitle}" Text="Tonspuren" />
-                    <TextBlock Style="{StaticResource Hint}" Text="So heißen die Spuren im Editor bei jedem Clip, und in dieser Farbe wird ihre Wellenform gezeichnet. Mit dem Haken legst du fest, welche Spuren beim Öffnen eines Clips an sind. Z.B. Spur 1 = Alles, Spur 2 = Spiel, Spur 3 = Mikro. Leer lassen = &quot;Spur N&quot;. Auf das Farbfeld klicken, um die Farbe zu ändern." />
-                    <ItemsControl x:Name="TrackNameList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
+                <!-- Tonspuren -->
+                <StackPanel x:Name="SecTracks" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="Tonspuren" />
+                    <TextBlock Style="{StaticResource SectionHint}" Text="Namen, Farben und welche Spuren beim Öffnen an sind." />
+                    <!-- Tonspur-Namen -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Tonspuren" />
+                            <TextBlock Style="{StaticResource Hint}" Text="So heißen die Spuren im Editor bei jedem Clip, und in dieser Farbe wird ihre Wellenform gezeichnet. Mit dem Haken legst du fest, welche Spuren beim Öffnen eines Clips an sind. Z.B. Spur 1 = Alles, Spur 2 = Spiel, Spur 3 = Mikro. Leer lassen = &quot;Spur N&quot;. Auf das Farbfeld klicken, um die Farbe zu ändern." />
+                            <ItemsControl x:Name="TrackNameList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel Margin="0,0,0,8">
+                                            <TextBlock
+                                                Width="70"
+                                                DockPanel.Dock="Left"
+                                                Style="{StaticResource Label}"
+                                                Text="{Binding Label}" />
+                                            <Button
+                                                Width="28"
+                                                Height="28"
+                                                Margin="0,0,8,0"
+                                                Padding="0"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Click="TrackColor_Click"
+                                                Cursor="Hand"
+                                                DockPanel.Dock="Left"
+                                                ToolTip="Farbe ändern">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border
+                                                            Background="{Binding ColorBrush}"
+                                                            BorderBrush="#40FFFFFF"
+                                                            BorderThickness="1"
+                                                            CornerRadius="6" />
+                                                    </ControlTemplate>
+                                                </Button.Template>
+                                            </Button>
+                                            <ui:Button
+                                                Margin="8,0,0,0"
+                                                Padding="8,6"
+                                                Appearance="Transparent"
+                                                Click="RemoveTrackName_Click"
+                                                DockPanel.Dock="Right"
+                                                Icon="{ui:SymbolIcon Dismiss24}"
+                                                ToolTip="Letzte Spur entfernen"
+                                                Visibility="{Binding RemoveVisibility}" />
+                                            <CheckBox
+                                                Margin="12,0,0,0"
+                                                VerticalAlignment="Center"
+                                                Click="TrackEnabled_Click"
+                                                Content="Standardmäßig an"
+                                                DockPanel.Dock="Right"
+                                                IsChecked="{Binding Enabled}"
+                                                ToolTip="Ist diese Spur beim Öffnen eines Clips angehakt (im Export)?" />
+                                            <ui:TextBox
+                                                LostFocus="TrackName_LostFocus"
+                                                PlaceholderText="{Binding Placeholder}"
+                                                Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <ui:Button
+                                HorizontalAlignment="Left"
+                                Click="AddTrackName_Click"
+                                Content="Spur hinzufügen"
+                                Icon="{ui:SymbolIcon Add24}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Design -->
+                <StackPanel x:Name="SecDesign" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="Design" />
+                    <TextBlock Style="{StaticResource SectionHint}" Text="Farbverlauf hinter dem Programm." />
+                    <!-- Design -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Design" />
+                            <ui:ToggleSwitch
+                                x:Name="ThemeSwitch"
+                                Checked="ThemeSwitch_Changed"
+                                Content="Eigenes Design mit Farbverlauf"
+                                Unchecked="ThemeSwitch_Changed" />
+                            <StackPanel x:Name="ThemePanel" Margin="0,14,0,0" Visibility="Collapsed">
+                                <Border
+                                    x:Name="ThemePreview"
+                                    Height="70"
+                                    Margin="0,0,0,14"
+                                    BorderBrush="#40FFFFFF"
+                                    BorderThickness="1"
+                                    CornerRadius="8" />
+                                <TextBlock Margin="0,0,0,6" Style="{StaticResource Label}" Text="Vorlagen" />
+                                <WrapPanel x:Name="ThemePresetList" Margin="0,0,0,12" />
+                                <TextBlock Margin="0,0,0,6" Style="{StaticResource Label}" Text="Farben (auf ein Feld klicken zum Ändern)" />
+                                <WrapPanel x:Name="ThemeColorList" Margin="0,0,0,12" />
                                 <DockPanel Margin="0,0,0,8">
                                     <TextBlock
-                                        Width="70"
+                                        Width="90"
+                                        VerticalAlignment="Center"
                                         DockPanel.Dock="Left"
                                         Style="{StaticResource Label}"
-                                        Text="{Binding Label}" />
-                                    <Button
-                                        Width="28"
-                                        Height="28"
-                                        Margin="0,0,8,0"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Click="TrackColor_Click"
-                                        Cursor="Hand"
-                                        DockPanel.Dock="Left"
-                                        ToolTip="Farbe ändern">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border
-                                                    Background="{Binding ColorBrush}"
-                                                    BorderBrush="#40FFFFFF"
-                                                    BorderThickness="1"
-                                                    CornerRadius="6" />
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                    <ui:Button
-                                        Margin="8,0,0,0"
-                                        Padding="8,6"
-                                        Appearance="Transparent"
-                                        Click="RemoveTrackName_Click"
-                                        DockPanel.Dock="Right"
-                                        Icon="{ui:SymbolIcon Dismiss24}"
-                                        ToolTip="Letzte Spur entfernen"
-                                        Visibility="{Binding RemoveVisibility}" />
-                                    <CheckBox
-                                        Margin="12,0,0,0"
-                                        VerticalAlignment="Center"
-                                        Click="TrackEnabled_Click"
-                                        Content="Standardmäßig an"
-                                        DockPanel.Dock="Right"
-                                        IsChecked="{Binding Enabled}"
-                                        ToolTip="Ist diese Spur beim Öffnen eines Clips angehakt (im Export)?" />
-                                    <ui:TextBox
-                                        LostFocus="TrackName_LostFocus"
-                                        PlaceholderText="{Binding Placeholder}"
-                                        Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+                                        Text="Richtung" />
+                                    <Slider
+                                        x:Name="ThemeAngleSlider"
+                                        IsMoveToPointEnabled="True"
+                                        Maximum="360"
+                                        Minimum="0"
+                                        ValueChanged="ThemeSlider_Changed" />
                                 </DockPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <ui:Button
-                        HorizontalAlignment="Left"
-                        Click="AddTrackName_Click"
-                        Content="Spur hinzufügen"
-                        Icon="{ui:SymbolIcon Add24}" />
+                                <DockPanel>
+                                    <TextBlock
+                                        Width="90"
+                                        VerticalAlignment="Center"
+                                        DockPanel.Dock="Left"
+                                        Style="{StaticResource Label}"
+                                        Text="Stärke" />
+                                    <Slider
+                                        x:Name="ThemeStrengthSlider"
+                                        IsMoveToPointEnabled="True"
+                                        Maximum="1"
+                                        Minimum="0.1"
+                                        ValueChanged="ThemeSlider_Changed" />
+                                </DockPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </Border>
 
-            <!-- Design -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource CardTitle}" Text="Design" />
-                    <ui:ToggleSwitch
-                        x:Name="ThemeSwitch"
-                        Checked="ThemeSwitch_Changed"
-                        Content="Eigenes Design mit Farbverlauf"
-                        Unchecked="ThemeSwitch_Changed" />
-                    <StackPanel x:Name="ThemePanel" Margin="0,14,0,0" Visibility="Collapsed">
-                        <Border
-                            x:Name="ThemePreview"
-                            Height="70"
-                            Margin="0,0,0,14"
-                            BorderBrush="#40FFFFFF"
-                            BorderThickness="1"
-                            CornerRadius="8" />
-                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Label}" Text="Vorlagen" />
-                        <WrapPanel x:Name="ThemePresetList" Margin="0,0,0,12" />
-                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Label}" Text="Farben (auf ein Feld klicken zum Ändern)" />
-                        <WrapPanel x:Name="ThemeColorList" Margin="0,0,0,12" />
-                        <DockPanel Margin="0,0,0,8">
-                            <TextBlock
-                                Width="90"
+                <!-- Programm -->
+                <StackPanel x:Name="SecApp" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="Programm" />
+                    <TextBlock Style="{StaticResource SectionHint}" Text="Updates, FFmpeg und wer mitgeholfen hat." />
+                    <!-- Updates -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Updates" />
+                            <TextBlock Style="{StaticResource Hint}" Text="Neue Versionen kommen direkt von GitHub. Beim Start wird automatisch nachgeschaut." />
+                            <TextBlock x:Name="UpdateStatusText" Style="{StaticResource Label}" TextWrapping="Wrap" />
+                            <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                                <ui:Button
+                                    x:Name="CheckUpdateButton"
+                                    Margin="0,0,8,0"
+                                    Click="CheckUpdate_Click"
+                                    Content="Nach Updates suchen"
+                                    Icon="{ui:SymbolIcon ArrowSync24}" />
+                                <ui:Button
+                                    x:Name="InstallUpdateButton"
+                                    Appearance="Success"
+                                    Click="InstallUpdate_Click"
+                                    Content="Installieren"
+                                    Icon="{ui:SymbolIcon ArrowDownload24}"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- FFmpeg -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="FFmpeg und Grafikkarte" />
+                            <TextBlock Style="{StaticResource Hint}" Text="FFmpeg schneidet und komprimiert die Clips. Mit NVIDIA oder AMD geht der Export über die Grafikkarte deutlich schneller." />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Style="{StaticResource Label}" Text="Status" />
+                                <TextBlock x:Name="FfmpegStatusText" Grid.Column="1" Style="{StaticResource Label}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="1" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Pfad" />
+                                <TextBlock
+                                    x:Name="FfmpegPathText"
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Style="{StaticResource Label}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Row="2" Margin="0,8,0,0" Style="{StaticResource Label}" Text="NVIDIA (NVENC)" />
+                                <TextBlock x:Name="NvidiaText" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource Label}" />
+                                <TextBlock Grid.Row="3" Margin="0,8,0,0" Style="{StaticResource Label}" Text="AMD (AMF)" />
+                                <TextBlock x:Name="AmdText" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource Label}" />
+                            </Grid>
+                            <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                                <ui:Button
+                                    x:Name="CheckFfmpegButton"
+                                    Margin="0,0,8,0"
+                                    Click="CheckFfmpeg_Click"
+                                    Content="Erneut prüfen"
+                                    Icon="{ui:SymbolIcon ArrowClockwise24}" />
+                                <ui:Button
+                                    Click="OpenLog_Click"
+                                    Content="Log-Ordner öffnen"
+                                    Icon="{ui:SymbolIcon DocumentText24}"
+                                    ToolTip="Für die Fehlersuche: log.txt aus diesem Ordner an Claude schicken" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Credits ganz unten -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Orientation="Horizontal">
+                            <Image
+                                Width="40"
+                                Height="40"
+                                Margin="0,0,14,0"
                                 VerticalAlignment="Center"
-                                DockPanel.Dock="Left"
-                                Style="{StaticResource Label}"
-                                Text="Richtung" />
-                            <Slider
-                                x:Name="ThemeAngleSlider"
-                                IsMoveToPointEnabled="True"
-                                Maximum="360"
-                                Minimum="0"
-                                ValueChanged="ThemeSlider_Changed" />
-                        </DockPanel>
-                        <DockPanel>
-                            <TextBlock
-                                Width="90"
-                                VerticalAlignment="Center"
-                                DockPanel.Dock="Left"
-                                Style="{StaticResource Label}"
-                                Text="Stärke" />
-                            <Slider
-                                x:Name="ThemeStrengthSlider"
-                                IsMoveToPointEnabled="True"
-                                Maximum="1"
-                                Minimum="0.1"
-                                ValueChanged="ThemeSlider_Changed" />
-                        </DockPanel>
-                    </StackPanel>
+                                RenderOptions.BitmapScalingMode="HighQuality"
+                                Source="pack://application:,,,/Assets/clippy.png" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource CardTitle}" Margin="0" Text="Credits" />
+                                <TextBlock Margin="0,4,0,0" Style="{StaticResource Label}" Text="Credits to Yippie for the Logo and the Name" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </Border>
 
-            <!-- Export-Ordner -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource CardTitle}" Text="Export-Ordner" />
-                    <TextBlock Style="{StaticResource Hint}" Text="Hier landen fertig komprimierte Clips. Clips in diesem Ordner tauchen nicht in der Bibliothek auf." />
-                    <TextBlock
-                        x:Name="ExportFolderText"
-                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                        TextTrimming="CharacterEllipsis" />
-                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
-                        <ui:Button
-                            Margin="0,0,8,0"
-                            Click="ChangeExportFolder_Click"
-                            Content="Ändern"
-                            Icon="{ui:SymbolIcon Folder24}" />
-                        <ui:Button
-                            Margin="0,0,8,0"
-                            Click="OpenExportFolder_Click"
-                            Content="Öffnen"
-                            Icon="{ui:SymbolIcon Open24}" />
-                        <ui:Button
-                            x:Name="ResetExportFolderButton"
-                            Click="ResetExportFolder_Click"
-                            Content="Standard"
-                            Icon="{ui:SymbolIcon ArrowReset24}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- Updates -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource CardTitle}" Text="Updates" />
-                    <TextBlock Style="{StaticResource Hint}" Text="Neue Versionen kommen direkt von GitHub. Beim Start wird automatisch nachgeschaut." />
-                    <TextBlock x:Name="UpdateStatusText" Style="{StaticResource Label}" TextWrapping="Wrap" />
-                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
-                        <ui:Button
-                            x:Name="CheckUpdateButton"
-                            Margin="0,0,8,0"
-                            Click="CheckUpdate_Click"
-                            Content="Nach Updates suchen"
-                            Icon="{ui:SymbolIcon ArrowSync24}" />
-                        <ui:Button
-                            x:Name="InstallUpdateButton"
-                            Appearance="Success"
-                            Click="InstallUpdate_Click"
-                            Content="Installieren"
-                            Icon="{ui:SymbolIcon ArrowDownload24}"
-                            Visibility="Collapsed" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- FFmpeg -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource CardTitle}" Text="FFmpeg und Grafikkarte" />
-                    <TextBlock Style="{StaticResource Hint}" Text="FFmpeg schneidet und komprimiert die Clips. Mit NVIDIA oder AMD geht der Export über die Grafikkarte deutlich schneller." />
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="180" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Style="{StaticResource Label}" Text="Status" />
-                        <TextBlock x:Name="FfmpegStatusText" Grid.Column="1" Style="{StaticResource Label}" TextWrapping="Wrap" />
-                        <TextBlock Grid.Row="1" Margin="0,8,0,0" Style="{StaticResource Label}" Text="Pfad" />
-                        <TextBlock
-                            x:Name="FfmpegPathText"
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            Margin="0,8,0,0"
-                            Style="{StaticResource Label}"
-                            TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Row="2" Margin="0,8,0,0" Style="{StaticResource Label}" Text="NVIDIA (NVENC)" />
-                        <TextBlock x:Name="NvidiaText" Grid.Row="2" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource Label}" />
-                        <TextBlock Grid.Row="3" Margin="0,8,0,0" Style="{StaticResource Label}" Text="AMD (AMF)" />
-                        <TextBlock x:Name="AmdText" Grid.Row="3" Grid.Column="1" Margin="0,8,0,0" Style="{StaticResource Label}" />
-                    </Grid>
-                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
-                        <ui:Button
-                            x:Name="CheckFfmpegButton"
-                            Margin="0,0,8,0"
-                            Click="CheckFfmpeg_Click"
-                            Content="Erneut prüfen"
-                            Icon="{ui:SymbolIcon ArrowClockwise24}" />
-                        <ui:Button
-                            Click="OpenLog_Click"
-                            Content="Log-Ordner öffnen"
-                            Icon="{ui:SymbolIcon DocumentText24}"
-                            ToolTip="Für die Fehlersuche: log.txt aus diesem Ordner an Claude schicken" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- Credits ganz unten -->
-            <Border Style="{StaticResource Card}">
-                <StackPanel Orientation="Horizontal">
-                    <Image
-                        Width="40"
-                        Height="40"
-                        Margin="0,0,14,0"
-                        VerticalAlignment="Center"
-                        RenderOptions.BitmapScalingMode="HighQuality"
-                        Source="pack://application:,,,/Assets/clippy.png" />
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource CardTitle}" Margin="0" Text="Credits" />
-                        <TextBlock Margin="0,4,0,0" Style="{StaticResource Label}" Text="Credits to Yippie for the Logo and the Name" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-        </StackPanel>
-    </ScrollViewer>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

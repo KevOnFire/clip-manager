@@ -15,9 +15,30 @@ public partial class SettingsView : UserControl
     private bool _ffmpegChecked;
     private ReleaseInfo? _release;
 
+    // Zuletzt offener Bereich (bleibt beim Hin- und Herwechseln erhalten).
+    private static int _lastSection;
+
     public SettingsView()
     {
         InitializeComponent();
+        SectionList.SelectedIndex = _lastSection;
+    }
+
+    /// <summary>Links einen Bereich gewählt: nur diesen rechts anzeigen.</summary>
+    private void SectionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SectionList.SelectedItem is not ListBoxItem { Tag: string name })
+        {
+            return;
+        }
+
+        _lastSection = SectionList.SelectedIndex;
+        foreach (var section in new[] { SecGeneral, SecExport, SecTracks, SecDesign, SecApp })
+        {
+            section.Visibility = section.Name == name ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        SectionScroller.ScrollToTop();
     }
 
     /// <summary>Überträgt die gespeicherten Einstellungen in die Felder.</summary>
