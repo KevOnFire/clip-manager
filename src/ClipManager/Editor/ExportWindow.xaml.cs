@@ -37,6 +37,8 @@ public partial class ExportWindow : FluentWindow
     private readonly bool _quickReplace;
 
     /// <param name="quickReplace">Schnellspeichern: sofort in voller Qualität exportieren und das Original ohne Nachfrage ersetzen.</param>
+    private readonly bool _saveMode;
+
     public ExportWindow(ClipFile clip, MediaInfo? info, EditTimeline timeline, bool saveMode, EditorView editor, bool quickReplace = false)
     {
         InitializeComponent();
@@ -45,6 +47,7 @@ public partial class ExportWindow : FluentWindow
         _timeline = timeline;
         _editor = editor;
         _ranges = timeline.KeptRanges;
+        _saveMode = saveMode;
         _audio = timeline.AudibleTracks.ToList();
         _outputDuration = _ranges.Aggregate(TimeSpan.Zero, (sum, r) => sum + r.Duration);
 
@@ -57,7 +60,7 @@ public partial class ExportWindow : FluentWindow
             new TargetItem(null, "Volle Qualität als Kopie (ohne Größenlimit)"),
         };
         TargetCombo.DisplayMemberPath = nameof(TargetItem.Label);
-        TargetCombo.SelectedIndex = saveMode ? 3 : (int)s.Tier;
+        TargetCombo.SelectedIndex = saveMode ? 3 : s.ExportTargetIndex();
         if (saveMode)
         {
             Title = "Speichern";
@@ -167,6 +170,14 @@ public partial class ExportWindow : FluentWindow
         }
 
         var limit = LimitMb;
+
+        // Ziel für den nächsten Export merken (nur beim Exportieren; Speichern/Schnellspeichern ist immer volle Qualität).
+        if (!_saveMode && !_quickReplace && TargetCombo.SelectedItem is TargetItem chosen)
+        {
+            App.Settings.RememberExportTarget(chosen.Tier);
+            App.SaveSettings();
+        }
+
         string output;
         try
         {

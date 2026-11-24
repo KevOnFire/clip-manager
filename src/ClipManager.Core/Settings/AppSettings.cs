@@ -87,6 +87,21 @@ public sealed class AppSettings
     /// <summary>Video-Farben in der Vorschau von 16–235 auf 0–255 strecken (sonst wirkt das Bild oft blass).</summary>
     public bool CorrectVideoColors { get; set; } = true;
 
+    /// <summary>
+    /// Zuletzt beim Export gewähltes Ziel: "Free", "NitroBasic", "Nitro" oder "Full" (volle Qualität).
+    /// Null = noch nie exportiert, dann gilt die Discord-Stufe aus den Einstellungen.
+    /// </summary>
+    public string? LastExportTarget { get; set; }
+
+    /// <summary>Welcher Eintrag im Export-Fenster vorausgewählt ist: 0–2 = Discord-Stufen, 3 = volle Qualität.</summary>
+    public int ExportTargetIndex() =>
+        LastExportTarget == "Full" ? 3
+        : Enum.TryParse<DiscordTier>(LastExportTarget, out var tier) && Enum.IsDefined(tier) ? (int)tier
+        : Enum.IsDefined(Tier) ? (int)Tier : 0;
+
+    /// <summary>Merkt sich das Ziel für den nächsten Export (null = volle Qualität).</summary>
+    public void RememberExportTarget(DiscordTier? tier) => LastExportTarget = tier?.ToString() ?? "Full";
+
     /// <summary>Lautstärke der Vorschau im Editor (0–1), gilt für alle Clips.</summary>
     public double PreviewVolume { get; set; } = 0.8;
 
