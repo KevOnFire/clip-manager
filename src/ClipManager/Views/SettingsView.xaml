@@ -200,6 +200,59 @@
                 </StackPanel>
             </Border>
 
+            <!-- Design -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource CardTitle}" Text="Design" />
+                    <ui:ToggleSwitch
+                        x:Name="ThemeSwitch"
+                        Checked="ThemeSwitch_Changed"
+                        Content="Eigenes Design mit Farbverlauf"
+                        Unchecked="ThemeSwitch_Changed" />
+                    <StackPanel x:Name="ThemePanel" Margin="0,14,0,0" Visibility="Collapsed">
+                        <Border
+                            x:Name="ThemePreview"
+                            Height="70"
+                            Margin="0,0,0,14"
+                            BorderBrush="#40FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="8" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Label}" Text="Vorlagen" />
+                        <WrapPanel x:Name="ThemePresetList" Margin="0,0,0,12" />
+                        <TextBlock Margin="0,0,0,6" Style="{StaticResource Label}" Text="Farben (auf ein Feld klicken zum Ändern)" />
+                        <WrapPanel x:Name="ThemeColorList" Margin="0,0,0,12" />
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock
+                                Width="90"
+                                VerticalAlignment="Center"
+                                DockPanel.Dock="Left"
+                                Style="{StaticResource Label}"
+                                Text="Richtung" />
+                            <Slider
+                                x:Name="ThemeAngleSlider"
+                                IsMoveToPointEnabled="True"
+                                Maximum="360"
+                                Minimum="0"
+                                ValueChanged="ThemeSlider_Changed" />
+                        </DockPanel>
+                        <DockPanel>
+                            <TextBlock
+                                Width="90"
+                                VerticalAlignment="Center"
+                                DockPanel.Dock="Left"
+                                Style="{StaticResource Label}"
+                                Text="Stärke" />
+                            <Slider
+                                x:Name="ThemeStrengthSlider"
+                                IsMoveToPointEnabled="True"
+                                Maximum="1"
+                                Minimum="0.1"
+                                ValueChanged="ThemeSlider_Changed" />
+                        </DockPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Export-Ordner -->
             <Border Style="{StaticResource Card}">
                 <StackPanel>

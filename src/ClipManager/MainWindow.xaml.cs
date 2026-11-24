@@ -22,6 +22,7 @@ public partial class MainWindow : FluentWindow
         VersionText.Text = $"Version {AppUpdater.CurrentVersionText}";
         ShowLibrary();
         ApplySavedBounds();
+        ApplyTheme();
         Loaded += async (_, _) => ShowUpdate(await AppUpdater.CheckAsync());
     }
 
@@ -212,6 +213,7 @@ public partial class MainWindow : FluentWindow
             // Ohne Mica-Hintergrund: der halbdurchsichtige Fensterhintergrund hat das Video im Vollbild blass gemacht.
             WindowBackdropType = WindowBackdropType.None;
             Background = System.Windows.Media.Brushes.Black;
+            ThemeLayer.Visibility = Visibility.Collapsed;
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             // Erst normal, dann maximiert: sonst bleibt die Taskleiste sichtbar.
@@ -223,6 +225,34 @@ public partial class MainWindow : FluentWindow
             WindowStyle = _styleBeforeFullscreen;
             ResizeMode = _resizeBeforeFullscreen;
             WindowState = _stateBeforeFullscreen;
+            ApplyTheme();
+        }
+    }
+
+    /// <summary>
+    /// Eigenes Design anwenden (oder wieder das normale). Mit Farbverlauf ohne Mica, sonst würde der
+    /// durchscheinende Windows-Hintergrund die Farben verfälschen.
+    /// </summary>
+    public void ApplyTheme()
+    {
+        if (AppTitleBar.Visibility != Visibility.Visible)
+        {
+            // Im Vollbild bleibt es schwarz; beim Verlassen wird das hier erneut aufgerufen.
+            return;
+        }
+
+        var theme = App.Settings.Theme;
+        if (theme.Enabled)
+        {
+            WindowBackdropType = WindowBackdropType.None;
+            Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x14, 0x14, 0x18));
+            ThemeLayer.Fill = Views.ThemeBrush.Create(theme);
+            ThemeLayer.Opacity = theme.ValidStrength();
+            ThemeLayer.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ThemeLayer.Visibility = Visibility.Collapsed;
             ClearValue(BackgroundProperty);
             WindowBackdropType = WindowBackdropType.Mica;
         }

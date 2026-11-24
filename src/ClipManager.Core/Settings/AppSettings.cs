@@ -90,6 +90,9 @@ public sealed class AppSettings
     /// <summary>Lautstärke der Vorschau im Editor (0–1), gilt für alle Clips.</summary>
     public double PreviewVolume { get; set; } = 0.8;
 
+    /// <summary>Eigenes Design mit Farbverlauf (standardmäßig aus).</summary>
+    public ThemeSettings Theme { get; set; } = new();
+
     /// <summary>Fenstergröße und -lage vom letzten Mal (null = Standard).</summary>
     public WindowBounds? Window { get; set; }
 
