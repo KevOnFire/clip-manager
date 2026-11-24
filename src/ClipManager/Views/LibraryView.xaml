@@ -10,6 +10,12 @@
         <local:FavoriteBrushConverter x:Key="FavoriteBrush" />
 
         <ContextMenu x:Key="TileMenu" x:Shared="False">
+            <MenuItem Click="MenuSelect_Click" Header="Auswählen (mehrere Clips)">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon Symbol="CheckmarkCircle24" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator />
             <MenuItem Click="MenuPlay_Click" Header="Abspielen">
                 <MenuItem.Icon>
                     <ui:SymbolIcon Symbol="Play24" />
@@ -53,7 +59,10 @@
                 ContextMenu="{StaticResource TileMenu}"
                 CornerRadius="8"
                 Cursor="Hand"
+                MouseEnter="Tile_MouseEnter"
+                MouseLeftButtonDown="Tile_MouseDown"
                 MouseLeftButtonUp="Tile_Click">
+                <Grid>
                 <StackPanel>
                     <Grid
                         Height="165"
@@ -100,6 +109,36 @@
                                 FontSize="14"
                                 Foreground="#FFFFC83D"
                                 Symbol="Cut24" />
+                        </Border>
+
+                        <!-- Auswahl unten links (nur im Auswahl-Modus) -->
+                        <Border
+                            Width="30"
+                            Height="30"
+                            Margin="10"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Background="#99000000"
+                            CornerRadius="15"
+                            IsHitTestVisible="False"
+                            Visibility="{Binding ShowSelectCircle, Converter={StaticResource BoolToVis}}">
+                            <ui:SymbolIcon FontSize="22" Foreground="White" Symbol="Circle24" />
+                        </Border>
+                        <Border
+                            Width="30"
+                            Height="30"
+                            Margin="10"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Background="White"
+                            CornerRadius="15"
+                            IsHitTestVisible="False"
+                            Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
+                            <ui:SymbolIcon
+                                FontSize="30"
+                                Filled="True"
+                                Foreground="{DynamicResource AccentFillColorDefaultBrush}"
+                                Symbol="CheckmarkCircle24" />
                         </Border>
 
                         <!-- Favorit unten rechts -->
@@ -157,6 +196,14 @@
                             ToolTip="Mehr" />
                     </Grid>
                 </StackPanel>
+                <!-- Rahmen, wenn ausgewählt -->
+                <Border
+                    BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                    BorderThickness="3"
+                    CornerRadius="7"
+                    IsHitTestVisible="False"
+                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}" />
+                </Grid>
             </Border>
         </DataTemplate>
     </UserControl.Resources>
@@ -226,15 +273,18 @@
                 TextChanged="SearchBox_TextChanged" />
             <ComboBox
                 x:Name="ShowCombo"
-                Width="160"
+                Width="200"
                 Margin="0,0,8,8"
-                SelectedIndex="0"
-                SelectionChanged="Filter_Changed">
-                <ComboBoxItem Content="Alle Clips" />
-                <ComboBoxItem Content="★ Favoriten" />
-                <ComboBoxItem Content="✂ Geschnitten" />
-                <ComboBoxItem Content="Ungeschnitten" />
-            </ComboBox>
+                SelectionChanged="ShowCombo_Changed" />
+            <ui:Button
+                x:Name="CategoryMenuButton"
+                Margin="0,0,8,8"
+                Padding="8"
+                VerticalAlignment="Stretch"
+                Click="CategoryMenu_Click"
+                Icon="{ui:SymbolIcon MoreHorizontal24}"
+                ToolTip="Kategorie umbenennen oder löschen"
+                Visibility="Collapsed" />
             <ComboBox
                 x:Name="FolderCombo"
                 Width="240"
@@ -254,6 +304,68 @@
                 <ComboBoxItem Content="Geschnittene zuerst" />
             </ComboBox>
         </WrapPanel>
+
+        <!-- Auswahlleiste: ersetzt die Filter, solange Clips ausgewählt werden -->
+        <Border
+            x:Name="SelectionBar"
+            Grid.Row="1"
+            Margin="0,0,0,16"
+            Padding="12,8"
+            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Visibility="Collapsed">
+            <DockPanel>
+                <ui:Button
+                    Appearance="Primary"
+                    Click="SelectionDone_Click"
+                    Content="Fertig"
+                    DockPanel.Dock="Right"
+                    Icon="{ui:SymbolIcon Checkmark24}"
+                    ToolTip="Auswahl beenden (Esc)" />
+                <WrapPanel VerticalAlignment="Center">
+                    <TextBlock
+                        x:Name="SelectionText"
+                        Margin="0,0,16,0"
+                        VerticalAlignment="Center"
+                        FontSize="15"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <ui:Button
+                        x:Name="AddToCategoryButton"
+                        Margin="0,0,8,0"
+                        Click="AddToCategory_Click"
+                        Content="Zu Kategorie hinzufügen"
+                        Icon="{ui:SymbolIcon TagMultiple24}" />
+                    <ui:Button
+                        x:Name="RemoveFromCategoryButton"
+                        Margin="0,0,8,0"
+                        Click="RemoveFromCategory_Click"
+                        Content="Aus Kategorie entfernen"
+                        Icon="{ui:SymbolIcon TagDismiss24}"
+                        Visibility="Collapsed" />
+                    <ui:Button
+                        Margin="0,0,8,0"
+                        Click="SelectPage_Click"
+                        Content="Ganze Seite"
+                        Icon="{ui:SymbolIcon SelectAllOn24}"
+                        ToolTip="Alle Clips auf dieser Seite auswählen" />
+                    <ui:Button
+                        Margin="0,0,8,0"
+                        Appearance="Transparent"
+                        Click="SelectNone_Click"
+                        Content="Nichts"
+                        Icon="{ui:SymbolIcon SelectAllOff24}"
+                        ToolTip="Auswahl leeren" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        Text="Tipp: gedrückt halten und über Clips ziehen" />
+                </WrapPanel>
+            </DockPanel>
+        </Border>
 
         <!-- Leerer Zustand -->
         <StackPanel
@@ -314,8 +426,22 @@
                 Content="Zurück"
                 Icon="{ui:SymbolIcon ChevronLeft24}" />
             <TextBlock
+                Margin="16,0,8,0"
+                VerticalAlignment="Center"
+                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                Text="Seite" />
+            <TextBox
+                x:Name="PageBox"
+                Width="64"
+                VerticalAlignment="Center"
+                HorizontalContentAlignment="Center"
+                GotKeyboardFocus="PageBox_GotFocus"
+                KeyDown="PageBox_KeyDown"
+                LostKeyboardFocus="PageBox_LostFocus"
+                ToolTip="Seitenzahl eingeben und Enter drücken" />
+            <TextBlock
                 x:Name="PageText"
-                Margin="16,0"
+                Margin="8,0,16,0"
                 VerticalAlignment="Center"
                 Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <ui:Button

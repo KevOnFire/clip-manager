@@ -23,7 +23,8 @@ public sealed record LibraryFilter(
     string? Folder = null,
     string? Search = null,
     ClipSort Sort = ClipSort.Newest,
-    EditedFilter Edited = EditedFilter.All);
+    EditedFilter Edited = EditedFilter.All,
+    IReadOnlySet<string>? OnlyPaths = null);
 
 /// <summary>Filtern, Sortieren und Seiten für die Bibliothek.</summary>
 public static class LibraryQuery
@@ -46,6 +47,12 @@ public static class LibraryQuery
             EditedFilter.Unedited => query.Where(c => !IsEdited(c)),
             _ => query,
         };
+
+        // Eigene Kategorie: nur Clips, die drin sind.
+        if (filter.OnlyPaths is { } only)
+        {
+            query = query.Where(c => only.Contains(c.Path));
+        }
 
         if (filter.FavoritesOnly)
         {
@@ -93,6 +100,31 @@ public static class LibraryQuery
     /// <summary>Seite, auf der der erste Clip der alten Seite nach dem Ändern der Seitengröße landet.</summary>
     public static int PageAfterResize(int page, int oldPageSize, int newPageSize) =>
         newPageSize <= 0 ? 0 : Math.Max(0, page) * Math.Max(1, oldPageSize) / newPageSize;
+
+    /// <summary>
+    /// Eingabe im Seitenfeld (1-basiert, wie angezeigt) in eine Seite (0-basiert) umwandeln.
+    /// Zu groß/klein wird auf die erste/letzte Seite gesetzt; Unsinn gibt null.
+    /// </summary>
+    public static int? ParsePageInput(string? text, int pageCount)
+    {
+        if (!int.TryParse(text?.Trim(), out var page))
+        {
+            return null;
+        }
+
+        return Math.Clamp(page, 1, Math.Max(1, pageCount)) - 1;
+    }
+
+    /// <summary>
+    /// Bereich für Mehrfachauswahl (Umschalt-Klick oder Ziehen): alle Positionen von <paramref name="anchor"/>
+    /// bis <paramref name="current"/>, egal in welche Richtung.
+    /// </summary>
+    public static IEnumerable<int> SelectionRange(int anchor, int current)
+    {
+        var from = Math.Min(anchor, current);
+        var to = Math.Max(anchor, current);
+        return Enumerable.Range(from, to - from + 1);
+    }
 
     public static int PageCount(int total, int pageSize) =>
         Math.Max(1, (total + pageSize - 1) / pageSize);

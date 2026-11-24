@@ -243,6 +243,10 @@ public partial class MainWindow : FluentWindow
         {
             _editor.HandleKey(e);
         }
+        else if (ReferenceEquals(PageHost.Content, _library))
+        {
+            _library.HandleKey(e);
+        }
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

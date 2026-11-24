@@ -49,6 +49,8 @@ public partial class EditorView : System.Windows.Controls.UserControl
         }
 
         ClipTitle.Text = App.Db.GetDisplayName(clip.Path) ?? clip.Name;
+        _isFavorite = App.Db.GetFavorites().Contains(clip.Path);
+        ShowFavorite();
 
         _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(25) };
         _timer.Tick += Timer_Tick;
@@ -99,6 +101,36 @@ public partial class EditorView : System.Windows.Controls.UserControl
     public event EventHandler<bool>? FullscreenRequested;
 
     public bool IsFullscreen { get; private set; }
+
+    /// <summary>Im Editor wurde der Stern umgeschaltet (für die Kacheln in der Bibliothek).</summary>
+    public static event EventHandler<(string Path, bool Favorite)>? FavoriteChanged;
+
+    private bool _isFavorite;
+
+    private void ShowFavorite()
+    {
+        FavoriteIcon.Filled = _isFavorite;
+        FavoriteIcon.Foreground = _isFavorite
+            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xC8, 0x3D))
+            : TryFindResource("TextFillColorPrimaryBrush") as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.White;
+        FavoriteButton.ToolTip = _isFavorite ? "Favorit entfernen" : "Als Favorit markieren";
+    }
+
+    private void Favorite_Click(object sender, RoutedEventArgs e)
+    {
+        _isFavorite = !_isFavorite;
+        try
+        {
+            App.Db.SetFavorite(_clip.Path, _isFavorite);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Favorit konnte nicht gespeichert werden", ex);
+        }
+
+        ShowFavorite();
+        FavoriteChanged?.Invoke(this, (_clip.Path, _isFavorite));
+    }
 
     /// <summary>Nächster (+1) oder vorheriger (-1) Clip aus der Bibliothek wurde angefordert.</summary>
     public event EventHandler<int>? NeighborRequested;

@@ -26,6 +26,14 @@
                 ToolTip="Zurück zur Bibliothek (Schnitte sind schon gemerkt)" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <ui:Button
+                    x:Name="FavoriteButton"
+                    Margin="0,0,12,0"
+                    Click="Favorite_Click"
+                    Focusable="False"
+                    ToolTip="Favorit (Stern)">
+                    <ui:SymbolIcon x:Name="FavoriteIcon" Symbol="Star24" />
+                </ui:Button>
+                <ui:Button
                     x:Name="PrevClipButton"
                     Margin="0,0,6,0"
                     Click="PrevClip_Click"
