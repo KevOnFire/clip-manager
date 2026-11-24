@@ -31,6 +31,10 @@ public partial class SettingsView : UserControl
             FolderList.ItemsSource = s.ClipFolders.ToList();
             SubfoldersSwitch.IsChecked = s.ScanSubfolders;
             VideoColorsSwitch.IsChecked = s.CorrectVideoColors;
+            ThemeSwitch.IsChecked = s.Theme.Enabled;
+            ThemeAngleSlider.Value = s.Theme.Angle;
+            ThemeStrengthSlider.Value = s.Theme.ValidStrength();
+            ShowTheme();
 
             FreeLimitBox.Text = s.LimitFor(DiscordTier.Free).ToString();
             BasicLimitBox.Text = s.LimitFor(DiscordTier.NitroBasic).ToString();
@@ -363,6 +367,224 @@ public partial class SettingsView : UserControl
         }
 
         menu.IsOpen = true;
+    }
+
+    // ---------- Design (Farbverlauf) ----------
+
+    private static readonly string[] ThemePalette =
+    {
+        "#2B1055", "#3A1C71", "#41295A", "#7597DE", "#3F5EFB", "#0F2027", "#203A43", "#2C5364",
+        "#0B3D2E", "#3A7D44", "#A8C686", "#FC466B", "#FF5FA2", "#D76D77", "#FFAF7B", "#6F0000",
+        "#200122", "#F7971E", "#FFD200", "#00C9FF", "#92FE9D", "#8E2DE2", "#4A00E0", "#1A1A1A",
+    };
+
+    private System.Windows.Threading.DispatcherTimer? _themeSaveTimer;
+
+    private void ThemeSwitch_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        App.Settings.Theme.Enabled = ThemeSwitch.IsChecked == true;
+        ThemeChanged(saveNow: true);
+    }
+
+    private void ThemeSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_loading || !IsLoaded)
+        {
+            return;
+        }
+
+        App.Settings.Theme.Angle = Math.Round(ThemeAngleSlider.Value);
+        App.Settings.Theme.Strength = Math.Round(ThemeStrengthSlider.Value, 2);
+        ThemeChanged(saveNow: false);
+    }
+
+    /// <summary>Vorschau und Fenster sofort anpassen; beim Ziehen am Regler erst kurz danach speichern.</summary>
+    private void ThemeChanged(bool saveNow)
+    {
+        ShowTheme();
+        (Window.GetWindow(this) as MainWindow)?.ApplyTheme();
+        _themeSaveTimer?.Stop();
+        if (saveNow)
+        {
+            App.SaveSettings();
+            return;
+        }
+
+        _themeSaveTimer ??= CreateThemeSaveTimer();
+        _themeSaveTimer.Start();
+    }
+
+    private System.Windows.Threading.DispatcherTimer CreateThemeSaveTimer()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            App.SaveSettings();
+        };
+        return timer;
+    }
+
+    private void ShowTheme()
+    {
+        var theme = App.Settings.Theme;
+        ThemePanel.Visibility = theme.Enabled ? Visibility.Visible : Visibility.Collapsed;
+        ThemePreview.Background = ThemeBrush.Create(theme);
+
+        ThemePresetList.Children.Clear();
+        foreach (var preset in ThemeSettings.Presets)
+        {
+            var button = new Button
+            {
+                Margin = new Thickness(0, 0, 8, 8),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = preset.Name,
+                Template = PresetTemplate(ThemeBrush.Create(preset.Colors, preset.Angle), preset.Name),
+            };
+            button.Click += (_, _) =>
+            {
+                theme.Colors = preset.Colors.ToList();
+                theme.Angle = preset.Angle;
+                _loading = true;
+                ThemeAngleSlider.Value = preset.Angle;
+                _loading = false;
+                ThemeChanged(saveNow: true);
+            };
+            ThemePresetList.Children.Add(button);
+        }
+
+        ThemeColorList.Children.Clear();
+        var colors = theme.ValidColors().ToList();
+        for (var i = 0; i < colors.Count; i++)
+        {
+            var index = i;
+            var swatch = new Button
+            {
+                Width = 40,
+                Height = 40,
+                Margin = new Thickness(0, 0, 8, 8),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = colors[i],
+                Template = SwatchTemplate(ToBrush(colors[i]), false),
+            };
+            swatch.Click += (_, _) => ShowThemeColorMenu(swatch, colors, index);
+            ThemeColorList.Children.Add(swatch);
+        }
+
+        if (colors.Count < ThemeSettings.MaxColors)
+        {
+            var add = new Wpf.Ui.Controls.Button
+            {
+                Height = 40,
+                Margin = new Thickness(0, 0, 8, 8),
+                Content = "Farbe",
+                Icon = new Wpf.Ui.Controls.SymbolIcon { Symbol = Wpf.Ui.Controls.SymbolRegular.Add24 },
+                ToolTip = "Weitere Farbe zum Verlauf hinzufügen",
+            };
+            add.Click += (_, _) =>
+            {
+                colors.Add(colors[^1]);
+                theme.Colors = colors;
+                ThemeChanged(saveNow: true);
+            };
+            ThemeColorList.Children.Add(add);
+        }
+    }
+
+    private void ShowThemeColorMenu(Button target, List<string> colors, int index)
+    {
+        var theme = App.Settings.Theme;
+        var menu = new ContextMenu { PlacementTarget = target, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        var swatches = new WrapPanel { Width = 8 * 32 };
+        foreach (var hex in ThemePalette)
+        {
+            var swatch = new Button
+            {
+                Width = 26,
+                Height = 26,
+                Margin = new Thickness(3),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = hex,
+                Template = SwatchTemplate(ToBrush(hex), string.Equals(hex, colors[index], StringComparison.OrdinalIgnoreCase)),
+            };
+            swatch.Click += (_, _) =>
+            {
+                menu.IsOpen = false;
+                colors[index] = hex;
+                theme.Colors = colors;
+                ThemeChanged(saveNow: true);
+            };
+            swatches.Children.Add(swatch);
+        }
+
+        menu.Items.Add(new MenuItem { Header = swatches, StaysOpenOnClick = true });
+        var custom = new MenuItem { Header = "Eigene Farbe (Hex-Code) …" };
+        custom.Click += async (_, _) =>
+        {
+            var text = await Dialogs.PromptAsync("Eigene Farbe", "Farbe als Hex-Code, z.B. #FF5FA2 (findest du in jedem Farbwähler im Internet):", colors[index], "Übernehmen");
+            if (text == null)
+            {
+                return;
+            }
+
+            text = text.Trim();
+            if (!text.StartsWith('#'))
+            {
+                text = "#" + text;
+            }
+
+            if (!AppSettings.IsHexColor(text))
+            {
+                await Dialogs.ErrorAsync("Das ist kein gültiger Hex-Code. Er sieht so aus: #RRGGBB, z.B. #FF5FA2.");
+                return;
+            }
+
+            colors[index] = text.ToUpperInvariant();
+            theme.Colors = colors;
+            ThemeChanged(saveNow: true);
+        };
+        menu.Items.Add(custom);
+
+        if (colors.Count > ThemeSettings.MinColors)
+        {
+            var remove = new MenuItem { Header = "Farbe entfernen" };
+            remove.Click += (_, _) =>
+            {
+                colors.RemoveAt(index);
+                theme.Colors = colors;
+                ThemeChanged(saveNow: true);
+            };
+            menu.Items.Add(remove);
+        }
+
+        menu.IsOpen = true;
+    }
+
+    /// <summary>Vorlage: kleines Feld mit dem Verlauf und dem Namen darunter.</summary>
+    private static ControlTemplate PresetTemplate(System.Windows.Media.Brush brush, string name)
+    {
+        var panel = new FrameworkElementFactory(typeof(StackPanel));
+        var swatch = new FrameworkElementFactory(typeof(Border));
+        swatch.SetValue(Border.BackgroundProperty, brush);
+        swatch.SetValue(Border.WidthProperty, 96.0);
+        swatch.SetValue(Border.HeightProperty, 40.0);
+        swatch.SetValue(Border.CornerRadiusProperty, new CornerRadius(6));
+        swatch.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+        swatch.SetValue(Border.BorderBrushProperty, new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)));
+        var label = new FrameworkElementFactory(typeof(TextBlock));
+        label.SetValue(TextBlock.TextProperty, name);
+        label.SetValue(TextBlock.FontSizeProperty, 11.0);
+        label.SetValue(TextBlock.MarginProperty, new Thickness(0, 3, 0, 0));
+        label.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        label.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+        panel.AppendChild(swatch);
+        panel.AppendChild(label);
+        return new ControlTemplate(typeof(Button)) { VisualTree = panel };
     }
 
     private static ControlTemplate SwatchTemplate(System.Windows.Media.Brush brush, bool selected)
