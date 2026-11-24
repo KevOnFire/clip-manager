@@ -119,7 +119,13 @@ public partial class EditorView : System.Windows.Controls.UserControl
     /// nach einem Sprung eine Weile alte Positionen, und den Ton danach zurückzusetzen war hörbar
     /// (Stück doppelt). Ein Bild nachzuziehen fällt dagegen kaum auf.
     /// </summary>
-    private TimeSpan Position => _playing && _audio != null ? _audio.Position : Player.Position;
+    private TimeSpan Position => !_playing ? _pausedAt : _audio != null ? _audio.Position : Player.Position;
+
+    /// <summary>
+    /// Stelle im Pausenzustand. Wird selbst gemerkt, weil der Windows-Player nach dem Setzen der
+    /// Position noch eine Weile die alte meldet; sonst ging es nach dem Ziehen an der falschen Stelle weiter.
+    /// </summary>
+    private TimeSpan _pausedAt;
 
     /// <summary>Ton kommt aus den einzelnen Spuren (sonst aus dem Windows-Player).</summary>
     private bool UsesTrackAudio => _audio != null;
@@ -369,12 +375,19 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
     private void SetPlaying(bool playing)
     {
+        if (!playing && _playing)
+        {
+            _audio?.Stop();
+            _pausedAt = Position;
+        }
+
+        var resumeAt = _pausedAt;
         _playing = playing;
         if (playing)
         {
             Player.IsMuted = UsesTrackAudio;
             Player.Play();
-            _audio?.Play(Player.Position);
+            _audio?.Play(resumeAt);
             // Der Windows-Player braucht nach dem Start oder einem Sprung etwas, bis seine Position
             // wieder läuft. So lange nicht nachziehen, sonst springt der Ton zurück und man hört Stellen doppelt.
             _lastAudioSync = DateTime.UtcNow;
@@ -386,9 +399,8 @@ public partial class EditorView : System.Windows.Controls.UserControl
             Player.IsMuted = true;
             if (_audio != null)
             {
-                _audio.Stop();
                 // Bild genau dort anhalten, wo der Ton aufgehört hat.
-                Player.Position = _audio.Position;
+                Player.Position = _pausedAt;
             }
         }
 
@@ -422,6 +434,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
         t = t < TimeSpan.Zero ? TimeSpan.Zero : t > _timeline.Duration ? _timeline.Duration : t;
         _lastSeekAt = DateTime.UtcNow;
+        _pausedAt = t;
         Player.Position = t;
         TimelineView.Position = t;
         UpdatePositionText(t);
@@ -442,6 +455,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
         t = t < TimeSpan.Zero ? TimeSpan.Zero : t > _timeline.Duration ? _timeline.Duration : t;
         _pendingSeek = t;
+        _pausedAt = t;
         _lastSeekAt = DateTime.UtcNow;
         TimelineView.Position = t;
         UpdatePositionText(t);
