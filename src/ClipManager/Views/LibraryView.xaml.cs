@@ -529,6 +529,21 @@ public partial class LibraryView : UserControl
         _hoverGrid = null;
     }
 
+    /// <summary>Clip neben <paramref name="path"/> in der aktuellen Reihenfolge (Filter + Sortierung), sonst null.</summary>
+    public ClipFile? Neighbor(string path, int direction)
+    {
+        for (var i = 0; i < _filtered.Count; i++)
+        {
+            if (string.Equals(_filtered[i].Path, path, StringComparison.OrdinalIgnoreCase))
+            {
+                var j = i + direction;
+                return j >= 0 && j < _filtered.Count ? _filtered[j] : null;
+            }
+        }
+
+        return null;
+    }
+
     private void Tile_Click(object sender, MouseButtonEventArgs e)
     {
         StopPreviews();

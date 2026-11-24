@@ -23,6 +23,21 @@
                 Focusable="False"
                 Icon="{ui:SymbolIcon ArrowLeft24}"
                 ToolTip="Zurück zur Bibliothek (Schnitte sind schon gemerkt)" />
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <ui:Button
+                    x:Name="PrevClipButton"
+                    Margin="0,0,6,0"
+                    Click="PrevClip_Click"
+                    Focusable="False"
+                    Icon="{ui:SymbolIcon ChevronLeft24}"
+                    ToolTip="Vorheriger Clip (Strg+←)" />
+                <ui:Button
+                    x:Name="NextClipButton"
+                    Click="NextClip_Click"
+                    Focusable="False"
+                    Icon="{ui:SymbolIcon ChevronRight24}"
+                    ToolTip="Nächster Clip (Strg+→)" />
+            </StackPanel>
             <TextBlock
                 x:Name="ClipTitle"
                 VerticalAlignment="Center"

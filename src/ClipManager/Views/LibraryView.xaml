@@ -168,16 +168,16 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Logo als graue Silhouette im Hintergrund, schimmert hinter den Kacheln durch -->
+        <!-- Logo groß und dunkel mittig im Hintergrund, nur leicht zu erkennen -->
         <Image
             Grid.Row="0"
             Grid.RowSpan="4"
-            Width="460"
-            Margin="0,0,8,8"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Bottom"
+            Margin="40"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
             IsHitTestVisible="False"
-            Opacity="0.3"
+            Opacity="0.35"
+            RenderOptions.BitmapScalingMode="HighQuality"
             Source="pack://application:,,,/Assets/clippy-silhouette.png"
             Stretch="Uniform" />
 
@@ -285,6 +285,8 @@
         <ScrollViewer
             x:Name="TileScroller"
             Grid.Row="2"
+            Focusable="False"
+            FocusVisualStyle="{x:Null}"
             HorizontalScrollBarVisibility="Disabled"
             VerticalScrollBarVisibility="Auto"
             Visibility="Collapsed">

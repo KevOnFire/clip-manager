@@ -118,11 +118,29 @@ public partial class MainWindow : FluentWindow
             }
         };
         editor.FullscreenRequested += (_, on) => SetFullscreen(on);
+        editor.NeighborRequested += (_, dir) => OpenNeighbor(editor, dir);
+        editor.SetNeighbors(_library.Neighbor(clip.Path, -1) != null, _library.Neighbor(clip.Path, 1) != null);
         _editor = editor;
         PageHost.Content = editor;
         LibraryNav.Appearance = ControlAppearance.Primary;
         SettingsNav.Appearance = ControlAppearance.Transparent;
         UpdateChrome();
+    }
+
+    /// <summary>Nächsten/vorherigen Clip der Bibliothek im Editor öffnen (Vollbild bleibt an).</summary>
+    private void OpenNeighbor(EditorView from, int direction)
+    {
+        if (!ReferenceEquals(_editor, from) || _library.Neighbor(from.ClipPath, direction) is not { } next)
+        {
+            return;
+        }
+
+        var fullscreen = from.IsFullscreen;
+        OpenEditor(next, null);
+        if (fullscreen)
+        {
+            _editor?.SetFullscreen(true);
+        }
     }
 
     private void CloseEditor()
@@ -136,6 +154,7 @@ public partial class MainWindow : FluentWindow
     private void SetFullscreen(bool on)
     {
         AppTitleBar.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        TitleLogo.Visibility = AppTitleBar.Visibility;
         UpdateChrome();
         if (on)
         {
