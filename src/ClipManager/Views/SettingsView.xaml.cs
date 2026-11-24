@@ -30,6 +30,7 @@ public partial class SettingsView : UserControl
             FolderList.ItemsSource = null;
             FolderList.ItemsSource = s.ClipFolders.ToList();
             SubfoldersSwitch.IsChecked = s.ScanSubfolders;
+            VideoColorsSwitch.IsChecked = s.CorrectVideoColors;
 
             FreeLimitBox.Text = s.LimitFor(DiscordTier.Free).ToString();
             BasicLimitBox.Text = s.LimitFor(DiscordTier.NitroBasic).ToString();
@@ -137,6 +138,17 @@ public partial class SettingsView : UserControl
         }
 
         App.Settings.ScanSubfolders = SubfoldersSwitch.IsChecked == true;
+        App.SaveSettings();
+    }
+
+    private void VideoColorsSwitch_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        App.Settings.CorrectVideoColors = VideoColorsSwitch.IsChecked == true;
         App.SaveSettings();
     }
 

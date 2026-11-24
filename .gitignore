@@ -4,5 +4,6 @@ obj/
 .idea/
 *.user
 publish/
+*.ps
 TestResults/
 *.swp

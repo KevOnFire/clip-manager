@@ -84,6 +84,12 @@ public sealed class AppSettings
     /// <summary>Eigener Pfad zu ffmpeg.exe. Leer = automatisch suchen.</summary>
     public string? FfmpegPath { get; set; }
 
+    /// <summary>Video-Farben in der Vorschau von 16–235 auf 0–255 strecken (sonst wirkt das Bild oft blass).</summary>
+    public bool CorrectVideoColors { get; set; } = true;
+
+    /// <summary>Fenstergröße und -lage vom letzten Mal (null = Standard).</summary>
+    public WindowBounds? Window { get; set; }
+
     public static Dictionary<DiscordTier, int> DefaultLimits() => new()
     {
         [DiscordTier.Free] = 20,
