@@ -11,7 +11,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Kopfzeile: zurück zur Bibliothek + Name des Clips -->
@@ -223,7 +222,43 @@
         </Grid>
 
         <!-- Werkzeuge -->
-        <WrapPanel x:Name="ToolsBar" Grid.Row="4" Margin="16,0,16,4">
+        <DockPanel Grid.Row="4" Margin="16,0,16,8">
+        <StackPanel
+            x:Name="BottomBar"
+            Margin="16,0,0,8"
+            VerticalAlignment="Top"
+            DockPanel.Dock="Right"
+            Orientation="Horizontal">
+            <ui:Button
+                x:Name="ExportButton"
+                Appearance="Primary"
+                Click="Export_Click"
+                Focusable="False"
+                Content="Exportieren"
+                Icon="{ui:SymbolIcon ArrowExportUp24}"
+                ToolTip="Clip passend fürs Discord-Limit exportieren" />
+            <ui:Button
+                x:Name="QuickSaveButton"
+                Width="40"
+                Height="34"
+                Margin="8,0,0,0"
+                Padding="0"
+                Click="QuickSave_Click"
+                Focusable="False"
+                Icon="{ui:SymbolIcon Save24}"
+                ToolTip="Schnellspeichern: Original direkt mit dem geschnittenen Clip überschreiben (volle Qualität, altes Original landet im Papierkorb)" />
+            <ui:Button
+                x:Name="SaveButton"
+                Width="40"
+                Height="34"
+                Margin="8,0,0,0"
+                Padding="0"
+                Click="Save_Click"
+                Focusable="False"
+                Icon="{ui:SymbolIcon SaveArrowRight24}"
+                ToolTip="Speichern …: in voller Qualität als Kopie, woanders hin oder Original ersetzen" />
+        </StackPanel>
+        <WrapPanel x:Name="ToolsBar">
             <WrapPanel.Resources>
                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
                     <Setter Property="Margin" Value="0,0,8,8" />
@@ -261,30 +296,8 @@
                 Content="Alles zurücksetzen"
                 Icon="{ui:SymbolIcon ArrowReset24}" />
         </WrapPanel>
-
-        <DockPanel x:Name="BottomBar" Grid.Row="5" Margin="16,0,16,14">
-            <ui:Button
-                x:Name="SaveButton"
-                Margin="8,0,0,0"
-                Click="Save_Click"
-                Content="Speichern"
-                DockPanel.Dock="Right"
-                Icon="{ui:SymbolIcon Save24}"
-                ToolTip="Geschnittenen Clip in voller Qualität speichern: Original ersetzen, Kopie oder woanders hin" />
-            <ui:Button
-                x:Name="ExportButton"
-                Appearance="Primary"
-                Content="Exportieren"
-                DockPanel.Dock="Right"
-                Click="Export_Click"
-                Icon="{ui:SymbolIcon ArrowExportUp24}"
-                ToolTip="Clip passend fürs Discord-Limit exportieren" />
-            <TextBlock
-                VerticalAlignment="Center"
-                FontSize="12"
-                Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                Text="Leertaste: Abspielen · F: Vollbild · ← →: 1 s (mit Umschalt 5 s) · , .: einzelnes Bild · Pos1/Ende: zu Anfang/Ende · In einer Spur ziehen: Stelle stumm schalten oder rausschneiden · Ränder von stummen/rausgeschnittenen Stellen lassen sich ziehen · Schnitte werden automatisch gemerkt, das Original bleibt, bis du es beim Speichern ersetzt."
-                TextWrapping="Wrap" />
         </DockPanel>
+
+
     </Grid>
 </UserControl>

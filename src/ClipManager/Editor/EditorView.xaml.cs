@@ -811,7 +811,23 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
     private void Save_Click(object sender, RoutedEventArgs e) => OpenExport(saveMode: true);
 
-    private void OpenExport(bool saveMode)
+    private async void QuickSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (_timeline == null)
+        {
+            return;
+        }
+
+        if (!_timeline.IsEdited)
+        {
+            await Dialogs.ErrorAsync("Der Clip ist noch nicht geschnitten, es gibt nichts zu speichern.");
+            return;
+        }
+
+        OpenExport(saveMode: true, quickReplace: true);
+    }
+
+    private void OpenExport(bool saveMode, bool quickReplace = false)
     {
         if (_timeline == null)
         {
@@ -819,7 +835,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         }
 
         SetPlaying(false);
-        var dialog = new ExportWindow(_clip, _info, _timeline, saveMode, this) { Owner = Window.GetWindow(this) };
+        var dialog = new ExportWindow(_clip, _info, _timeline, saveMode, this, quickReplace) { Owner = Window.GetWindow(this) };
         dialog.ShowDialog();
         if (dialog.OriginalReplaced)
         {

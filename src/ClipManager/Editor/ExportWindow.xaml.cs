@@ -34,7 +34,10 @@ public partial class ExportWindow : FluentWindow
     private string? _outputPath;
     private Point _dragStart;
 
-    public ExportWindow(ClipFile clip, MediaInfo? info, EditTimeline timeline, bool saveMode, EditorView editor)
+    private readonly bool _quickReplace;
+
+    /// <param name="quickReplace">Schnellspeichern: sofort in voller Qualität exportieren und das Original ohne Nachfrage ersetzen.</param>
+    public ExportWindow(ClipFile clip, MediaInfo? info, EditTimeline timeline, bool saveMode, EditorView editor, bool quickReplace = false)
     {
         InitializeComponent();
         _clip = clip;
@@ -61,7 +64,20 @@ public partial class ExportWindow : FluentWindow
             StartButton.Content = "Fertig machen";
         }
 
-        Loaded += async (_, _) => await PrepareAsync();
+        _quickReplace = quickReplace;
+        if (quickReplace)
+        {
+            Title = "Schnellspeichern";
+        }
+
+        Loaded += async (_, _) =>
+        {
+            await PrepareAsync();
+            if (_quickReplace && StartButton.IsEnabled)
+            {
+                await RunExportAsync();
+            }
+        };
         Closing += (_, e) =>
         {
             if (_cts != null)
@@ -139,7 +155,9 @@ public partial class ExportWindow : FluentWindow
         WarningText.Text = "Der Clip ist für dieses Limit ziemlich lang, die Qualität wird schlecht. Kürzer schneiden hilft.";
     }
 
-    private async void Start_Click(object sender, RoutedEventArgs e)
+    private async void Start_Click(object sender, RoutedEventArgs e) => await RunExportAsync();
+
+    private async Task RunExportAsync()
     {
         var ffmpeg = App.LocateFfmpeg();
         if (ffmpeg == null)
@@ -227,6 +245,11 @@ public partial class ExportWindow : FluentWindow
         }
         FileNameText.Text = Path.GetFileName(_outputPath);
         DonePanel.Visibility = Visibility.Visible;
+
+        if (_quickReplace && result.Success)
+        {
+            await ReplaceOriginalAsync(confirm: false);
+        }
     }
 
     private static string Shorten(string? text)
@@ -321,7 +344,9 @@ public partial class ExportWindow : FluentWindow
         }
     }
 
-    private async void Replace_Click(object sender, RoutedEventArgs e)
+    private async void Replace_Click(object sender, RoutedEventArgs e) => await ReplaceOriginalAsync(confirm: true);
+
+    private async Task ReplaceOriginalAsync(bool confirm)
     {
         if (_outputPath == null)
         {
@@ -339,7 +364,7 @@ public partial class ExportWindow : FluentWindow
         var warning = LimitMb != null
             ? "\n\nAchtung: Das ist die verkleinerte Discord-Version. Für volle Qualität im Editor auf \"Speichern\" gehen."
             : string.Empty;
-        var ok = await Dialogs.ConfirmAsync(
+        var ok = !confirm || await Dialogs.ConfirmAsync(
             "Original ersetzen?",
             $"Das Original kommt in den Papierkorb (dort kannst du es zurückholen) und der geschnittene Clip nimmt seinen Platz ein.{warning}",
             "Ersetzen");

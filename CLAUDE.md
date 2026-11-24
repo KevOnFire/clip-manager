@@ -62,7 +62,7 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf, Spur-Zeilen).
                           Bedienung: in Spur ziehen = Auswahl → Menü (stumm / rausschneiden), Ränder von stummen und
                           rausgeschnittenen Stellen ziehbar, Klick auf so eine Stelle = Menü (wieder laut / reinnehmen)
-  Editor/ExportWindow     Export-/Speichern-Dialog: Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Original ersetzen / Kopie / Speichern unter
+  Editor/ExportWindow     Export-/Speichern-Dialog (auch "Schnellspeichern": exportiert volle Qualität und ersetzt das Original ohne Nachfrage): Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Original ersetzen / Kopie / Speichern unter
   Editor/TrackPlayer      NAudio: Spuren gemischt abspielen (an/aus, Lautstärke, stumme Stellen)
   Editor/TrackRowViewModel  Spur-Kopf (Farbstreifen, Name, Haken, Lautstärke); Namen und Farben global in settings.json
                           (TrackNames, TrackColors; Standardfarben in AppSettings.Palette)
