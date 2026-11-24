@@ -92,6 +92,20 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
     public bool IsFullscreen { get; private set; }
 
+    /// <summary>Nächster (+1) oder vorheriger (-1) Clip aus der Bibliothek wurde angefordert.</summary>
+    public event EventHandler<int>? NeighborRequested;
+
+    /// <summary>Pfeil-Knöpfe nur anbieten, wenn es in die Richtung noch einen Clip gibt.</summary>
+    public void SetNeighbors(bool hasPrevious, bool hasNext)
+    {
+        PrevClipButton.IsEnabled = hasPrevious;
+        NextClipButton.IsEnabled = hasNext;
+    }
+
+    private void PrevClip_Click(object sender, RoutedEventArgs e) => NeighborRequested?.Invoke(this, -1);
+
+    private void NextClip_Click(object sender, RoutedEventArgs e) => NeighborRequested?.Invoke(this, 1);
+
     /// <summary>Wird ausgelöst, wenn sich die gespeicherten Schnitte eines Clips ändern (für die Kacheln).</summary>
     public static event EventHandler<string>? EditsSaved;
 
@@ -510,6 +524,14 @@ public partial class EditorView : System.Windows.Controls.UserControl
         if (e.Key == Key.Escape && IsFullscreen)
         {
             SetFullscreen(false);
+            e.Handled = true;
+            return;
+        }
+
+        // Strg+Pfeil: Clip wechseln (Pfeil allein springt im Clip)
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key is Key.Left or Key.Right)
+        {
+            NeighborRequested?.Invoke(this, e.Key == Key.Right ? 1 : -1);
             e.Handled = true;
             return;
         }

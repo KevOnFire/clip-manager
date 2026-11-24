@@ -11,9 +11,10 @@ namespace ClipManager.Editor;
 /// </summary>
 public sealed class TrackPlayer : IDisposable
 {
-    // Die Ausgabe läuft durchgehend (bei Pause kommt Stille). Früher wurde sie zum Springen
-    // gestoppt und sofort neu gestartet; dabei liefen bei NAudio kurz zwei Abspiel-Threads
-    // gleichzeitig und man hörte den Ton doppelt und versetzt.
+    // Gesprungen wird im Mixer, die Ausgabe wird nie gestoppt und neu gestartet: dabei liefen bei
+    // NAudio kurz zwei Abspiel-Threads gleichzeitig (Ton doppelt und versetzt). Bei Pause wird die
+    // Ausgabe nur angehalten (waveOutPause); nur Stille zu liefern ließ bei manchen Soundkarten den
+    // letzten Ton in Schleife laufen.
     private readonly object _lock = new();
     private readonly List<WaveFileReader> _readers = new();
     private readonly List<TrackSampleProvider> _tracks = new();
@@ -41,7 +42,6 @@ public sealed class TrackPlayer : IDisposable
         _gate = new GateProvider(this, _master);
         _output = new WaveOutEvent { DesiredLatency = 100, NumberOfBuffers = 3 };
         _output.Init(_gate);
-        _output.Play();
     }
 
     /// <summary>Legt den Player an. Gibt null zurück, wenn es nicht klappt (z.B. kein Audiogerät).</summary>
@@ -107,6 +107,11 @@ public sealed class TrackPlayer : IDisposable
             _seekMarkBytes = _gate.WrittenBytes;
             _playing = true;
         }
+
+        if (_output.PlaybackState != PlaybackState.Playing)
+        {
+            _output.Play();
+        }
     }
 
     public void Stop()
@@ -123,6 +128,8 @@ public sealed class TrackPlayer : IDisposable
             _startTime += TimeSpan.FromSeconds(Math.Max(0, played) / (double)_output.OutputWaveFormat.AverageBytesPerSecond);
             _playing = false;
         }
+
+        _output.Pause();
     }
 
     public void Dispose()
