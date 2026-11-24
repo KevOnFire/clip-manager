@@ -176,4 +176,83 @@ public class LibraryTests
         Assert.Equal(0, LibraryQuery.PageAfterResize(0, 25, 30));
         Assert.Equal(2, LibraryQuery.PageAfterResize(3, 20, 25));
     }
+
+    [Fact]
+    public void Kategorien_AnlegenUmbenennenLoeschen()
+    {
+        using var dir = new TempDir();
+        var db = new LibraryDb(Path.Combine(dir.Path, "library.db"));
+        var aces = db.AddCategory(" Aces ");
+        Assert.Equal("Aces", aces.Name);
+        Assert.Equal(aces.Id, db.AddCategory("aces").Id); // gleicher Name = gleiche Kategorie
+        var funny = db.AddCategory("Lustig");
+        Assert.Equal(new[] { "Aces", "Lustig" }, db.GetCategories().Select(c => c.Name));
+
+        Assert.False(db.RenameCategory(funny.Id, "ACES"));
+        Assert.False(db.RenameCategory(funny.Id, "  "));
+        Assert.True(db.RenameCategory(funny.Id, "Fails"));
+        Assert.Equal(new[] { "Aces", "Fails" }, db.GetCategories().Select(c => c.Name));
+
+        db.SetInCategory(funny.Id, new[] { @"C:\a.mp4" }, true);
+        db.DeleteCategory(funny.Id);
+        Assert.Single(db.GetCategories());
+        Assert.False(db.GetCategoryMembers().ContainsKey(funny.Id));
+    }
+
+    [Fact]
+    public void Kategorien_ClipsReinUndRaus_UndWandernBeimUmbenennen()
+    {
+        using var dir = new TempDir();
+        var db = new LibraryDb(Path.Combine(dir.Path, "library.db"));
+        var cat = db.AddCategory("Aces");
+        db.SetInCategory(cat.Id, new[] { @"C:\a.mp4", @"C:\b.mp4", @"C:\c.mp4" }, true);
+        db.SetInCategory(cat.Id, new[] { @"C:\a.mp4" }, true); // doppelt schadet nicht
+        db.SetInCategory(cat.Id, new[] { @"C:\b.mp4" }, false);
+        Assert.Equal(new[] { @"C:\a.mp4", @"C:\c.mp4" }, db.GetCategoryMembers()[cat.Id].OrderBy(p => p));
+
+        db.MovePath(@"C:\a.mp4", @"C:\x.mp4");
+        db.RemovePath(@"C:\c.mp4");
+        Assert.Equal(new[] { @"C:\x.mp4" }, db.GetCategoryMembers()[cat.Id]);
+    }
+
+    [Fact]
+    public void Filter_NurKategorie()
+    {
+        var clips = new[]
+        {
+            new ClipFile(@"C:\a.mp4", @"C:\", 1, DateTime.UtcNow),
+            new ClipFile(@"C:\b.mp4", @"C:\", 1, DateTime.UtcNow.AddMinutes(-1)),
+        };
+        var only = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { @"c:\B.mp4" };
+        var result = LibraryQuery.Apply(clips, new LibraryFilter(OnlyPaths: only), new HashSet<string>(), new Dictionary<string, TimeSpan>());
+        Assert.Equal(@"C:\b.mp4", Assert.Single(result).Path);
+    }
+
+    [Theory]
+    [InlineData("5", 90, 4)]
+    [InlineData(" 1 ", 90, 0)]
+    [InlineData("500", 90, 89)]
+    [InlineData("0", 90, 0)]
+    [InlineData("-3", 90, 0)]
+    public void SeiteEingeben(string text, int pages, int expected)
+    {
+        Assert.Equal(expected, LibraryQuery.ParsePageInput(text, pages));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData(null)]
+    public void SeiteEingeben_Unsinn(string? text)
+    {
+        Assert.Null(LibraryQuery.ParsePageInput(text, 10));
+    }
+
+    [Fact]
+    public void Auswahlbereich_InBeideRichtungen()
+    {
+        Assert.Equal(new[] { 2, 3, 4, 5 }, LibraryQuery.SelectionRange(2, 5));
+        Assert.Equal(new[] { 2, 3, 4, 5 }, LibraryQuery.SelectionRange(5, 2));
+        Assert.Equal(new[] { 3 }, LibraryQuery.SelectionRange(3, 3));
+    }
 }

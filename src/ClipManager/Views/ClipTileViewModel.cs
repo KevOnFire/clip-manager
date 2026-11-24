@@ -100,6 +100,41 @@ public sealed class ClipTileViewModel : INotifyPropertyChanged
         }
     }
 
+    private bool _isSelected;
+    private bool _selectionMode;
+
+    /// <summary>In der Mehrfachauswahl markiert.</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected != value)
+            {
+                _isSelected = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowSelectCircle));
+            }
+        }
+    }
+
+    /// <summary>Auswahl-Modus ist an: leerer Kreis auf nicht markierten Kacheln.</summary>
+    public bool SelectionMode
+    {
+        get => _selectionMode;
+        set
+        {
+            if (_selectionMode != value)
+            {
+                _selectionMode = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowSelectCircle));
+            }
+        }
+    }
+
+    public bool ShowSelectCircle => _selectionMode && !_isSelected;
+
     public ImageSource? Thumbnail
     {
         get => _thumbnail;
