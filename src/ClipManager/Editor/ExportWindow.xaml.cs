@@ -80,6 +80,7 @@ public partial class ExportWindow : FluentWindow
         };
         Closing += (_, e) =>
         {
+            StopPreview();
             if (_cts != null)
             {
                 _cts.Cancel();
@@ -245,6 +246,7 @@ public partial class ExportWindow : FluentWindow
         }
         FileNameText.Text = Path.GetFileName(_outputPath);
         DonePanel.Visibility = Visibility.Visible;
+        StartPreview();
 
         if (_quickReplace && result.Success)
         {
@@ -259,6 +261,47 @@ public partial class ExportWindow : FluentWindow
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => _cts?.Cancel();
+
+    // ---------- Vorschau des fertigen Clips (läuft stumm in Schleife) ----------
+
+    private void StartPreview()
+    {
+        if (_outputPath == null || !File.Exists(_outputPath))
+        {
+            return;
+        }
+
+        try
+        {
+            PreviewPlayer.Source = new Uri(_outputPath);
+            PreviewPlayer.Play();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Export-Vorschau konnte nicht starten", ex);
+        }
+    }
+
+    /// <summary>Datei freigeben (vor dem Schließen).</summary>
+    private void StopPreview()
+    {
+        PreviewPlayer.Stop();
+        PreviewPlayer.Close();
+        PreviewPlayer.Source = null;
+    }
+
+    private void PreviewPlayer_MediaEnded(object sender, RoutedEventArgs e)
+    {
+        PreviewPlayer.Position = TimeSpan.Zero;
+        PreviewPlayer.Play();
+    }
+
+    private void PreviewSound_Click(object sender, RoutedEventArgs e)
+    {
+        PreviewPlayer.IsMuted = !PreviewPlayer.IsMuted;
+        PreviewSoundIcon.Symbol = PreviewPlayer.IsMuted ? Wpf.Ui.Controls.SymbolRegular.SpeakerMute24 : Wpf.Ui.Controls.SymbolRegular.Speaker224;
+        e.Handled = true;
+    }
 
     private void DragCard_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _dragStart = e.GetPosition(this);
 

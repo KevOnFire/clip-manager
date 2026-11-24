@@ -808,6 +808,7 @@ public partial class LibraryView : UserControl
     // ---------- Eigene Kategorien ----------
 
     private const string NewCategoryTag = "new";
+    private const string HeaderTag = "header";
 
     private void LoadCategories()
     {
@@ -838,10 +839,10 @@ public partial class LibraryView : UserControl
             ShowCombo.Items.Add(new Separator());
             ShowCombo.Items.Add(new ComboBoxItem
             {
-                Content = "EIGENE KATEGORIEN",
+                Content = "Eigene Kategorien",
+                Tag = HeaderTag,
                 IsEnabled = false,
-                FontSize = 11,
-                FontWeight = FontWeights.SemiBold,
+                FontSize = 12,
             });
             foreach (var category in _categories)
             {
@@ -851,7 +852,11 @@ public partial class LibraryView : UserControl
 
             ShowCombo.Items.Add(new ComboBoxItem { Content = "＋ Neue Kategorie …", Tag = NewCategoryTag });
 
-            var match = ShowCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => Equals(i.Tag, select) && !Equals(i.Tag, NewCategoryTag));
+            // Nie die Überschrift oder "Neue Kategorie" auswählen (die Überschrift hatte früher keinen Tag
+            // und wurde bei select = null gewählt).
+            select ??= "all";
+            var match = ShowCombo.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(i => Equals(i.Tag, select) && !Equals(i.Tag, NewCategoryTag) && !Equals(i.Tag, HeaderTag));
             ShowCombo.SelectedItem = match ?? ShowCombo.Items[0];
         }
         finally

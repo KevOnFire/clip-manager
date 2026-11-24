@@ -36,7 +36,7 @@ Aufnehmen macht OBS (Replay-Puffer), nicht dieses Programm.
 | Updates | GitHub Releases, Update-Knopf im Programm | Kev soll nichts manuell runterladen |
 | Name/Icon | Programm heißt **Clippy** (seit 24.11.2026), Icon `src/ClipManager/Assets/clippy.ico/.png` (von Kev). Die exe heißt bewusst weiter `ClipManager.exe`, Ordner/Namespaces auch | Alte Versionen prüfen beim Update auf `ClipManager.exe` im ZIP; Umbenennen der exe würde den Update-Knopf kaputt machen |
 | Editor | Läuft im Hauptfenster (`EditorView`, UserControl) statt eigenem Fenster; Vollbild per F/Doppelklick/Knopf, Esc beendet | Kev wollte kein 2. Fenster (24.11.2026) |
-| Vorschau im Editor | Bild: WPF `MediaElement` (stumm). Ton: Spuren per FFmpeg als WAV in den Cache, mit NAudio gemischt (`TrackPlayer`), Video ist der Takt, Ton wird bei >150 ms Abweichung nachgezogen (nicht in den ersten 800 ms nach Start/Sprung). Die NAudio-Ausgabe läuft durchgehend (Pause = Stille), gesprungen wird im Mixer: Stop()+Play() direkt hintereinander ließ bei NAudio zwei Abspiel-Threads laufen (Ton doppelt) | Hört genau, was exportiert wird. Bis die WAVs fertig sind, spielt MediaElement Spur 1 |
+| Vorschau im Editor | Bild: WPF `MediaElement` (stumm), mit Farbkorrektur-Shader `Editor/Shaders/VideoLevels.fx` (16–235 → 0–255, wird im Workflow mit `fxc` übersetzt, in den Einstellungen abschaltbar). Beim Abspielen gibt der Ton den Takt vor, das Bild wird nachgezogen (Windows-Player meldet nach Sprüngen alte Positionen). Ton: Spuren per FFmpeg als WAV in den Cache, mit NAudio gemischt (`TrackPlayer`), Video ist der Takt, Ton wird bei >150 ms Abweichung nachgezogen (nicht in den ersten 800 ms nach Start/Sprung). Die NAudio-Ausgabe läuft durchgehend (Pause = Stille), gesprungen wird im Mixer: Stop()+Play() direkt hintereinander ließ bei NAudio zwei Abspiel-Threads laufen (Ton doppelt) | Hört genau, was exportiert wird. Bis die WAVs fertig sind, spielt MediaElement Spur 1 |
 
 Falls MediaElement bei manchen Formaten (MKV, HEVC) nicht reicht: LibVLC/mpv nur fürs Bild.
 
@@ -44,9 +44,9 @@ Falls MediaElement bei manchen Formaten (MKV, HEVC) nicht reicht: LibVLC/mpv nur
 
 ```
 src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linux, hat Tests)
-  Settings/               AppSettings, SettingsStore (JSON), DiscordTier
+  Settings/               AppSettings, SettingsStore (JSON), DiscordTier, WindowBounds (Fenstergröße merken), ThemeSettings (Farbverlauf-Design)
   Editing/                EditTimeline (Anfang/Ende, Schnitte, entfernte Teile, Spuren, Rückgängig), TrackEdit, RangeSet, ClipEditState (JSON), TimeText
-  Library/                ClipScanner, ClipFile, LibraryDb (SQLite), LibraryQuery (Filter/Sort/Seiten), ClipFileOps (Kopie/Umbenennen)
+  Library/                ClipScanner, ClipFile, LibraryDb (SQLite, inkl. eigene Kategorien), LibraryQuery (Filter/Sort/Seiten, Seitengröße aus Spalten, Auswahlbereich), ClipFileOps (Kopie/Umbenennen)
   Media/                  FfmpegLocator, FfmpegProbe (Version + GPU-Test), MediaInfo (ffprobe), ThumbnailCache, FilmstripCache (Zeitleiste), AudioTrackCache + Waveform (Spuren als WAV), ProcessRunner
   Export/                 ExportPlanner (Bitrate/Auflösung aus Limit), ExportCommand (FFmpeg-Filtergraph), Exporter (Lauf, Fortschritt, Größen-Check + Wiederholung)
   Updates/                UpdateChecker (GitHub-API), UpdateScript (cmd zum Ersetzen + Neustart)
@@ -96,8 +96,8 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 
 | Was | Wo |
 | --- | --- |
-| Einstellungen | `%AppData%\ClipManager\settings.json` |
-| Favoriten, Clip-Infos, Schnitte (Tabelle `edits`), eigene Namen (`display_names`) | `%AppData%\ClipManager\library.db` |
+| Einstellungen (auch Fenstergröße, Vorschau-Lautstärke, Design) | `%AppData%\ClipManager\settings.json` |
+| Favoriten, Clip-Infos, Schnitte (Tabelle `edits`), eigene Namen (`display_names`), Kategorien (`categories`, `clip_categories`) | `%AppData%\ClipManager\library.db` |
 | Vorschaubilder, Filmstreifen | `%LocalAppData%\ClipManager\thumbs\` |
 | Tonspuren als WAV (Cache, 3 Tage) | `%LocalAppData%\ClipManager\audio\` |
 | Zwischen-Exporte (2 Tage) | `%TEMP%\ClipManager\Export\` |
@@ -122,6 +122,7 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | 4 | Export: Discord-Stufen, Bitrate-Rechnung, GPU-Encoder, Fortschritt, fertigen Clip per Drag-and-Drop aus dem Programm ziehen, "Speichern unter" | fertig (PR #6, #7) |
 | 5 | Editor Teil 2: Audiospuren einzeln (Lautstärke, stumm, stumme Bereiche), Vorschau hört genau, was exportiert wird; Speichern (ersetzen/Kopie) | fertig (PR #8); Schneiden per Ziehen + Spur-Namen in den Einstellungen in PR #9 |
 | 6 | Feinschliff: Hover-Vorschau auf Kacheln, Design, Fehlerfälle | teilweise (PR #13: Clippy-Name/Icon, Editor im Hauptfenster, Vollbild, Hover-Vorschau, eigene Namen, Filter geschnitten, Unterordner an/aus, Griffe an Rändern) |
+| – | Runde 24.11.: Fenstergröße merken, Lautstärke global, Seiten = Spalten × 5 Reihen, Seite eingeben, Clip wechseln (Strg+Pfeile), Stern im Editor, eigene Kategorien + Mehrfachauswahl (lange halten + ziehen), Design mit Farbverlauf, Export mit Video-Vorschau | fertig (PR #15–#20) |
 | 7 | Für andere: Installer, Ersteinrichtung, ggf. Code-Signatur | offen |
 
 ### Etappe 3/5: Editor (Plan)
