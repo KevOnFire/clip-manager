@@ -352,6 +352,23 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+
+            <!-- Credits ganz unten -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel Orientation="Horizontal">
+                    <Image
+                        Width="40"
+                        Height="40"
+                        Margin="0,0,14,0"
+                        VerticalAlignment="Center"
+                        RenderOptions.BitmapScalingMode="HighQuality"
+                        Source="pack://application:,,,/Assets/clippy.png" />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource CardTitle}" Margin="0" Text="Credits" />
+                        <TextBlock Margin="0,4,0,0" Style="{StaticResource Label}" Text="Credits to Yippie for the Logo and the Name" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

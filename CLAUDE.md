@@ -67,7 +67,7 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   Editor/TrackPlayer      NAudio: Spuren gemischt abspielen (an/aus, Lautstärke, stumme Stellen)
   Editor/TrackRowViewModel  Spur-Kopf (Farbstreifen, Name, Haken, Lautstärke); Namen und Farben global in settings.json
                           (TrackNames, TrackColors; Standardfarben in AppSettings.Palette)
-  Views/SettingsView      Ordner (+ Unterordner an/aus), Discord, Tonspuren (Name, Farbe, standardmäßig an, +/–), Export-Ordner, Updates, FFmpeg/GPU
+  Views/SettingsView      Ordner (+ Unterordner an/aus), Discord, Tonspuren (Name, Farbe, standardmäßig an, +/–), Export-Ordner, Updates, FFmpeg/GPU, Credits ganz unten ("Credits to Yippie for the Logo and the Name", Wortlaut von Kev)
   AppUpdater, ShellFiles, Dialogs, FolderPicker
 tests/ClipManager.Core.Tests/   xUnit-Tests für Core
 .github/workflows/build.yml     Windows-Build, Tests, FFmpeg dazu, Artifact, Release auf main
