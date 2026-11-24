@@ -12,7 +12,14 @@ namespace ClipManager.Views;
 
 public partial class LibraryView : UserControl
 {
-    private const int PageSize = 24;
+    // Kachel 296 breit + 16 Abstand (siehe TileTemplate). Reihen pro Seite fest, Spalten je nach Fensterbreite,
+    // damit die letzte Reihe voll ist.
+    private const double TileSlotWidth = 312;
+    private const int RowsPerPage = 5;
+    private int _pageSize = 25;
+    private readonly DispatcherTimer _resizeTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+
+    private int PageSize => _pageSize;
 
     // ffprobe-Aufrufe begrenzen, damit die Platte nicht überlastet wird.
     private static readonly SemaphoreSlim ProbeLimit = new(4);
@@ -37,6 +44,16 @@ public partial class LibraryView : UserControl
     public LibraryView()
     {
         InitializeComponent();
+        SizeChanged += (_, _) =>
+        {
+            _resizeTimer.Stop();
+            _resizeTimer.Start();
+        };
+        _resizeTimer.Tick += (_, _) =>
+        {
+            _resizeTimer.Stop();
+            UpdatePageSize();
+        };
         _searchTimer.Tick += (_, _) =>
         {
             _searchTimer.Stop();
@@ -131,6 +148,26 @@ public partial class LibraryView : UserControl
 
         _page = Math.Clamp(_page, 0, LibraryQuery.PageCount(_filtered.Count, PageSize) - 1);
         ShowPage();
+    }
+
+    /// <summary>Seitengröße an die Spaltenzahl anpassen; die Seite mit dem bisher ersten Clip bleibt sichtbar.</summary>
+    private void UpdatePageSize()
+    {
+        // Breite für die Kacheln: Steuerelement minus Bildlaufleiste.
+        var width = TileList.ActualWidth > 0 ? TileList.ActualWidth : ActualWidth - SystemParameters.VerticalScrollBarWidth;
+        var size = LibraryQuery.PageSizeFor(width, TileSlotWidth, RowsPerPage);
+        if (size == _pageSize)
+        {
+            return;
+        }
+
+        _page = LibraryQuery.PageAfterResize(_page, _pageSize, size);
+        _pageSize = size;
+        if (_filtered.Count > 0)
+        {
+            _page = Math.Clamp(_page, 0, LibraryQuery.PageCount(_filtered.Count, PageSize) - 1);
+            ShowPage();
+        }
     }
 
     private void ShowPage()

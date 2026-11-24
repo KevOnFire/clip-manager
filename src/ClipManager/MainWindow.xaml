@@ -85,6 +85,9 @@
         <ContentControl
             x:Name="PageHost"
             Grid.Row="2"
+            Focusable="False"
+            FocusVisualStyle="{x:Null}"
+            IsTabStop="False"
             Margin="16,4,16,16" />
     </Grid>
 </ui:FluentWindow>
