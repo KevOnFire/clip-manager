@@ -202,11 +202,30 @@ public static class ExportCommand
             .Where(r => r.End > 0)
             .Select(r => $"between(t,{F(Math.Max(0, r.Start - MuteEdge))},{F(r.End)})")
             .ToList();
+
+        // Leiser gemachte Stellen: Faktor 10^(dB·w/20), w steigt am Anfang über die Übergangszeit von 0 auf 1
+        // und fällt am Ende wieder ab (gleiche Kurve wie DuckRange.GainAt in der Vorschau).
+        var ducks = edit.Ducked
+            .Select(d => (Start: (d.Range.Start - offset).TotalSeconds, End: (d.Range.End - offset).TotalSeconds, d.Db, d.Fade))
+            .Where(d => d.End > 0 && d.Fade > 0)
+            .Select(d => $"pow(10,{F(d.Db)}*clip(min((t-{F(d.Start)})/{F(d.Fade)},({F(d.End)}-t)/{F(d.Fade)}),0,1)/20)")
+            .ToList();
+
+        if (muted.Count > 0 || ducks.Count > 0)
+        {
+            // Kleine Audio-Pakete (64 Samples), damit "stumm" fast auf die Millisekunde genau greift
+            // und Übergänge glatt sind, plus ein paar Millisekunden Vorlauf gegen Knacken an der Kante.
+            sb.Append("asetnsamples=n=64:p=0,");
+        }
+
+        if (ducks.Count > 0)
+        {
+            sb.Append($"volume='{string.Join('*', ducks)}':eval=frame,");
+        }
+
         if (muted.Count > 0)
         {
-            // Kleine Audio-Pakete (64 Samples), damit "stumm" fast auf die Millisekunde genau greift,
-            // und ein paar Millisekunden Vorlauf, damit an der Kante kein Knacken durchrutscht.
-            sb.Append($"asetnsamples=n=64:p=0,volume=0:enable='{string.Join('+', muted)}',");
+            sb.Append($"volume=0:enable='{string.Join('+', muted)}',");
         }
 
         return sb.ToString();

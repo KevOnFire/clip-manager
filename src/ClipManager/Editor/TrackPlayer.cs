@@ -227,7 +227,7 @@ public sealed class TrackPlayer : IDisposable
             {
                 Array.Clear(buffer, offset, read);
             }
-            else if (track.Muted.Count == 0)
+            else if (track.Muted.Count == 0 && track.Ducked.Count == 0)
             {
                 if (Math.Abs(track.Volume - 1) > 0.001)
                 {
@@ -254,6 +254,12 @@ public sealed class TrackPlayer : IDisposable
                             gain = 0f;
                             break;
                         }
+                    }
+
+                    // Leiser gemachte Stellen mit sanftem Übergang (gleiche Kurve wie im Export).
+                    if (gain > 0 && track.Ducked.Count > 0)
+                    {
+                        gain *= (float)track.DuckGainAt(t);
                     }
 
                     for (var c = 0; c < channels && i + c < read; c++)
