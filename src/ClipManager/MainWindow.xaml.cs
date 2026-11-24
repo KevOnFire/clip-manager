@@ -102,6 +102,7 @@ public partial class MainWindow : FluentWindow
         if (_editor != null && string.Equals(_editor.ClipPath, clip.Path, StringComparison.OrdinalIgnoreCase))
         {
             PageHost.Content = _editor;
+            UpdateChrome();
             return;
         }
 
@@ -121,6 +122,7 @@ public partial class MainWindow : FluentWindow
         PageHost.Content = editor;
         LibraryNav.Appearance = ControlAppearance.Primary;
         SettingsNav.Appearance = ControlAppearance.Transparent;
+        UpdateChrome();
     }
 
     private void CloseEditor()
@@ -130,19 +132,19 @@ public partial class MainWindow : FluentWindow
         editor?.Close();
     }
 
-    /// <summary>Vollbild für den Editor: Seitenleiste und Titelleiste weg, Fenster über den ganzen Bildschirm.</summary>
+    /// <summary>Vollbild für den Editor: Navigation und Titelleiste weg, Fenster über den ganzen Bildschirm.</summary>
     private void SetFullscreen(bool on)
     {
-        var visibility = on ? Visibility.Collapsed : Visibility.Visible;
-        Sidebar.Visibility = visibility;
-        AppTitleBar.Visibility = visibility;
-        SidebarColumn.Width = on ? new GridLength(0) : new GridLength(220);
-        PageHost.Margin = on ? new Thickness(0) : new Thickness(8, 8, 24, 16);
+        AppTitleBar.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        UpdateChrome();
         if (on)
         {
             _stateBeforeFullscreen = WindowState;
             _styleBeforeFullscreen = WindowStyle;
             _resizeBeforeFullscreen = ResizeMode;
+            // Ohne Mica-Hintergrund: der halbdurchsichtige Fensterhintergrund hat das Video im Vollbild blass gemacht.
+            WindowBackdropType = WindowBackdropType.None;
+            Background = System.Windows.Media.Brushes.Black;
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             // Erst normal, dann maximiert: sonst bleibt die Taskleiste sichtbar.
@@ -154,7 +156,18 @@ public partial class MainWindow : FluentWindow
             WindowStyle = _styleBeforeFullscreen;
             ResizeMode = _resizeBeforeFullscreen;
             WindowState = _stateBeforeFullscreen;
+            ClearValue(BackgroundProperty);
+            WindowBackdropType = WindowBackdropType.Mica;
         }
+    }
+
+    /// <summary>Im Editor keine Navigation (mehr Platz fürs Video), sonst schon.</summary>
+    private void UpdateChrome()
+    {
+        var inEditor = _editor != null && ReferenceEquals(PageHost.Content, _editor);
+        NavBar.Visibility = inEditor ? Visibility.Collapsed : Visibility.Visible;
+        var fullscreen = _editor?.IsFullscreen == true && inEditor;
+        PageHost.Margin = fullscreen ? new Thickness(0) : inEditor ? new Thickness(0, 0, 0, 0) : new Thickness(16, 4, 16, 16);
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -177,6 +190,7 @@ public partial class MainWindow : FluentWindow
         PageHost.Content = _library;
         LibraryNav.Appearance = ControlAppearance.Primary;
         SettingsNav.Appearance = ControlAppearance.Transparent;
+        UpdateChrome();
         _ = _library.RefreshAsync();
     }
 
@@ -186,6 +200,7 @@ public partial class MainWindow : FluentWindow
         PageHost.Content = _settings;
         LibraryNav.Appearance = ControlAppearance.Transparent;
         SettingsNav.Appearance = ControlAppearance.Primary;
+        UpdateChrome();
         _settings.Refresh();
     }
 }

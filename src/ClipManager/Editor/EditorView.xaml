@@ -66,14 +66,14 @@
             <Slider
                 x:Name="SeekSlider"
                 Margin="0,0,0,6"
+                Cursor="Hand"
                 DockPanel.Dock="Top"
                 Focusable="False"
-                IsMoveToPointEnabled="True"
                 Maximum="1"
                 Minimum="0"
-                Thumb.DragCompleted="SeekSlider_DragCompleted"
-                Thumb.DragStarted="SeekSlider_DragStarted"
-                ValueChanged="SeekSlider_ValueChanged"
+                PreviewMouseLeftButtonDown="SeekSlider_MouseDown"
+                PreviewMouseLeftButtonUp="SeekSlider_MouseUp"
+                PreviewMouseMove="SeekSlider_MouseMove"
                 Visibility="Collapsed" />
             <ui:Button
                 x:Name="PlayButton"
@@ -112,6 +112,7 @@
                 Icon="{ui:SymbolIcon FullScreenMaximize24}"
                 ToolTip="Vollbild (F, Doppelklick aufs Video, Esc zum Beenden)" />
             <Slider
+                IsMoveToPointEnabled="True"
                 x:Name="VolumeSlider"
                 Width="120"
                 VerticalAlignment="Center"
@@ -189,13 +190,14 @@
                                         Text="{Binding VolumeText}"
                                         TextAlignment="Right" />
                                     <Slider
+                IsMoveToPointEnabled="True"
                                         Width="70"
                                         VerticalAlignment="Center"
                                         DockPanel.Dock="Right"
                                         Focusable="False"
                                         Maximum="2"
                                         Minimum="0"
-                                        Thumb.DragStarted="TrackVolume_DragStarted"
+                                        PreviewMouseLeftButtonDown="TrackVolume_MouseDown"
                                         ToolTip="Lautstärke dieser Spur"
                                         Value="{Binding Volume}" />
                                     <TextBlock

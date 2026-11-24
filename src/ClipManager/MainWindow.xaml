@@ -17,63 +17,60 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <ui:TitleBar x:Name="AppTitleBar" Grid.Row="0" Title="Clippy">
             <ui:TitleBar.Icon>
-                <ui:ImageIcon Source="pack://application:,,,/Assets/clippy.png" />
+                <ui:ImageIcon
+                    Width="30"
+                    Height="30"
+                    Source="pack://application:,,,/Assets/clippy.png" />
             </ui:TitleBar.Icon>
         </ui:TitleBar>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="SidebarColumn" Width="220" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <!-- Seitenleiste -->
-            <DockPanel x:Name="Sidebar" Grid.Column="0" Margin="12,8,8,12">
-                <TextBlock
-                    x:Name="VersionText"
-                    DockPanel.Dock="Bottom"
-                    Margin="8,0,0,0"
-                    FontSize="11"
-                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+        <!-- Navigation: klein oben statt Seitenleiste, damit die Clips mehr Platz haben -->
+        <DockPanel x:Name="NavBar" Grid.Row="1" Margin="16,0,16,6">
+            <TextBlock
+                x:Name="VersionText"
+                Margin="12,0,0,0"
+                VerticalAlignment="Center"
+                DockPanel.Dock="Right"
+                FontSize="11"
+                Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+            <ui:Button
+                x:Name="UpdateButton"
+                Padding="10,4"
+                Appearance="Success"
+                Click="UpdateButton_Click"
+                Content="Update verfügbar"
+                DockPanel.Dock="Right"
+                FontSize="12"
+                Icon="{ui:SymbolIcon ArrowDownload20}"
+                Visibility="Collapsed" />
+            <StackPanel Orientation="Horizontal">
                 <ui:Button
-                    x:Name="UpdateButton"
-                    Margin="0,0,0,8"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Left"
-                    Appearance="Success"
-                    Click="UpdateButton_Click"
-                    Content="Update verfügbar"
-                    DockPanel.Dock="Bottom"
-                    Icon="{ui:SymbolIcon ArrowDownload24}"
-                    Visibility="Collapsed" />
-                <StackPanel>
-                    <ui:Button
-                        x:Name="LibraryNav"
-                        Margin="0,0,0,4"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Click="LibraryNav_Click"
-                        Content="Bibliothek"
-                        Icon="{ui:SymbolIcon VideoClip24}" />
-                    <ui:Button
-                        x:Name="SettingsNav"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Click="SettingsNav_Click"
-                        Content="Einstellungen"
-                        Icon="{ui:SymbolIcon Settings24}" />
-                </StackPanel>
-            </DockPanel>
+                    x:Name="LibraryNav"
+                    Margin="0,0,6,0"
+                    Padding="10,4"
+                    Click="LibraryNav_Click"
+                    Content="Bibliothek"
+                    FontSize="13"
+                    Icon="{ui:SymbolIcon VideoClip20}" />
+                <ui:Button
+                    x:Name="SettingsNav"
+                    Padding="10,4"
+                    Click="SettingsNav_Click"
+                    Content="Einstellungen"
+                    FontSize="13"
+                    Icon="{ui:SymbolIcon Settings20}" />
+            </StackPanel>
+        </DockPanel>
 
-            <ContentControl
-                x:Name="PageHost"
-                Grid.Column="1"
-                Margin="8,8,24,16" />
-        </Grid>
+        <ContentControl
+            x:Name="PageHost"
+            Grid.Row="2"
+            Margin="16,4,16,16" />
     </Grid>
 </ui:FluentWindow>

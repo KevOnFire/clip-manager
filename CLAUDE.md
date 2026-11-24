@@ -36,7 +36,7 @@ Aufnehmen macht OBS (Replay-Puffer), nicht dieses Programm.
 | Updates | GitHub Releases, Update-Knopf im Programm | Kev soll nichts manuell runterladen |
 | Name/Icon | Programm heißt **Clippy** (seit 24.11.2026), Icon `src/ClipManager/Assets/clippy.ico/.png` (von Kev). Die exe heißt bewusst weiter `ClipManager.exe`, Ordner/Namespaces auch | Alte Versionen prüfen beim Update auf `ClipManager.exe` im ZIP; Umbenennen der exe würde den Update-Knopf kaputt machen |
 | Editor | Läuft im Hauptfenster (`EditorView`, UserControl) statt eigenem Fenster; Vollbild per F/Doppelklick/Knopf, Esc beendet | Kev wollte kein 2. Fenster (24.11.2026) |
-| Vorschau im Editor | Bild: WPF `MediaElement` (stumm). Ton: Spuren per FFmpeg als WAV in den Cache, mit NAudio gemischt (`TrackPlayer`), Video ist der Takt, Ton wird bei >120 ms Abweichung nachgezogen | Hört genau, was exportiert wird. Bis die WAVs fertig sind, spielt MediaElement Spur 1 |
+| Vorschau im Editor | Bild: WPF `MediaElement` (stumm). Ton: Spuren per FFmpeg als WAV in den Cache, mit NAudio gemischt (`TrackPlayer`), Video ist der Takt, Ton wird bei >150 ms Abweichung nachgezogen (nicht in den ersten 800 ms nach Start/Sprung). Die NAudio-Ausgabe läuft durchgehend (Pause = Stille), gesprungen wird im Mixer: Stop()+Play() direkt hintereinander ließ bei NAudio zwei Abspiel-Threads laufen (Ton doppelt) | Hört genau, was exportiert wird. Bis die WAVs fertig sind, spielt MediaElement Spur 1 |
 
 Falls MediaElement bei manchen Formaten (MKV, HEVC) nicht reicht: LibVLC/mpv nur fürs Bild.
 
@@ -52,7 +52,8 @@ src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linu
   Updates/                UpdateChecker (GitHub-API), UpdateScript (cmd zum Ersetzen + Neustart)
 src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   App.xaml(.cs)           Start, globale Dienste (Settings, Db, Thumbnails)
-  MainWindow              Seitenleiste (Bibliothek, Einstellungen, Update-Knopf)
+  MainWindow              Kleine Navigation oben (Bibliothek, Einstellungen, Update-Knopf), im Editor ausgeblendet; Vollbild
+                          (ohne Mica, schwarzer Hintergrund, sonst wirkt das Video blass)
   Views/LibraryView       Kacheln, Seiten, Filter (Favoriten/geschnitten/ungeschnitten), Menü, Ordner-Überwachung,
                           Hover-Vorschau (stummes MediaElement in der Kachel), eigener Name im Programm (Tabelle display_names),
                           Klick öffnet Editor im Hauptfenster
@@ -65,7 +66,7 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   Editor/TrackPlayer      NAudio: Spuren gemischt abspielen (an/aus, Lautstärke, stumme Stellen)
   Editor/TrackRowViewModel  Spur-Kopf (Farbstreifen, Name, Haken, Lautstärke); Namen und Farben global in settings.json
                           (TrackNames, TrackColors; Standardfarben in AppSettings.Palette)
-  Views/SettingsView      Ordner, Discord, Tonspuren (Name + Farbe, +/–), Export-Ordner, Updates, FFmpeg/GPU
+  Views/SettingsView      Ordner (+ Unterordner an/aus), Discord, Tonspuren (Name, Farbe, standardmäßig an, +/–), Export-Ordner, Updates, FFmpeg/GPU
   AppUpdater, ShellFiles, Dialogs, FolderPicker
 tests/ClipManager.Core.Tests/   xUnit-Tests für Core
 .github/workflows/build.yml     Windows-Build, Tests, FFmpeg dazu, Artifact, Release auf main

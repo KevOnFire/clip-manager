@@ -52,8 +52,7 @@
                 ContextMenu="{StaticResource TileMenu}"
                 CornerRadius="8"
                 Cursor="Hand"
-                MouseLeftButtonUp="Tile_Click"
-                ToolTip="{Binding ToolTipText}">
+                MouseLeftButtonUp="Tile_Click">
                 <StackPanel>
                     <Grid
                         Height="165"
@@ -133,7 +132,8 @@
                                 FontWeight="SemiBold"
                                 Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                                 Text="{Binding Name}"
-                                TextTrimming="CharacterEllipsis" />
+                                TextTrimming="CharacterEllipsis"
+                                ToolTip="{Binding ToolTipText}" />
                             <TextBlock
                                 Margin="0,3,0,0"
                                 FontSize="12"
@@ -167,6 +167,19 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+
+        <!-- Logo als graue Silhouette im Hintergrund, schimmert hinter den Kacheln durch -->
+        <Image
+            Grid.Row="0"
+            Grid.RowSpan="4"
+            Width="460"
+            Margin="0,0,8,8"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            IsHitTestVisible="False"
+            Opacity="0.3"
+            Source="pack://application:,,,/Assets/clippy-silhouette.png"
+            Stretch="Uniform" />
 
         <!-- Kopfzeile -->
         <DockPanel Grid.Row="0" Margin="0,0,0,12">

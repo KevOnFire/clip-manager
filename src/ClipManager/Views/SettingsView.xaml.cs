@@ -247,13 +247,18 @@ public partial class SettingsView : UserControl
     {
         var names = App.Settings.TrackNames;
         var colors = App.Settings.TrackColors;
-        var count = names.Keys.Concat(colors.Keys).DefaultIfEmpty(-1).Max() + 1;
+        var enabled = App.Settings.TrackEnabledByDefault;
+        var count = names.Keys.Concat(colors.Keys).Concat(enabled.Keys).DefaultIfEmpty(-1).Max() + 1;
         count = Math.Max(count, 1);
+        var rule = Core.Export.ExportPlanner.DefaultAudioTracks(count);
         _trackNames = Enumerable.Range(0, count)
             .Select(i => new TrackNameRow(
                 i,
                 names.TryGetValue(i, out var n) ? n : string.Empty,
-                colors.TryGetValue(i, out var c) && AppSettings.IsHexColor(c) ? c : null))
+                colors.TryGetValue(i, out var c) && AppSettings.IsHexColor(c) ? c : null)
+            {
+                Enabled = enabled.TryGetValue(i, out var on) ? on : rule.Contains(i),
+            })
             .ToList();
         ShowTrackNames();
     }
@@ -277,12 +282,13 @@ public partial class SettingsView : UserControl
         App.Settings.TrackColors = _trackNames
             .Where(r => r.Color != null)
             .ToDictionary(r => r.Index, r => r.Color!);
+        App.Settings.TrackEnabledByDefault = _trackNames.ToDictionary(r => r.Index, r => r.Enabled);
         App.SaveSettings();
     }
 
     private void AddTrackName_Click(object sender, RoutedEventArgs e)
     {
-        _trackNames.Add(new TrackNameRow(_trackNames.Count, string.Empty, null));
+        _trackNames.Add(new TrackNameRow(_trackNames.Count, string.Empty, null) { Enabled = true });
         ShowTrackNames();
     }
 
@@ -297,6 +303,8 @@ public partial class SettingsView : UserControl
     }
 
     private void TrackName_LostFocus(object sender, RoutedEventArgs e) => SaveTrackNames();
+
+    private void TrackEnabled_Click(object sender, RoutedEventArgs e) => SaveTrackNames();
 
     /// <summary>Klick aufs Farbfeld: Menü mit Farben zur Auswahl.</summary>
     private void TrackColor_Click(object sender, RoutedEventArgs e)
@@ -374,6 +382,9 @@ public partial class SettingsView : UserControl
             Color = color;
         }
 
+        /// <summary>Spur ist beim Öffnen eines Clips an.</summary>
+        public bool Enabled { get; set; } = true;
+
         /// <summary>Eigene Farbe oder null (= Standardfarbe).</summary>
         public string? Color { get; set; }
 
@@ -391,6 +402,6 @@ public partial class SettingsView : UserControl
 
         public string Placeholder => Index == 0 ? "z.B. Alles" : $"Spur {Index + 1}";
 
-        public Visibility RemoveVisibility => IsLast ? Visibility.Visible : Visibility.Collapsed;
+        public Visibility RemoveVisibility => IsLast ? Visibility.Visible : Visibility.Hidden;
     }
 }

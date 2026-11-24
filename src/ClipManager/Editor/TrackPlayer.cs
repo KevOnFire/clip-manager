@@ -11,11 +11,17 @@ namespace ClipManager.Editor;
 /// </summary>
 public sealed class TrackPlayer : IDisposable
 {
+    // Die Ausgabe läuft durchgehend (bei Pause kommt Stille). Früher wurde sie zum Springen
+    // gestoppt und sofort neu gestartet; dabei liefen bei NAudio kurz zwei Abspiel-Threads
+    // gleichzeitig und man hörte den Ton doppelt und versetzt.
+    private readonly object _lock = new();
     private readonly List<WaveFileReader> _readers = new();
     private readonly List<TrackSampleProvider> _tracks = new();
     private readonly VolumeSampleProvider _master;
     private readonly WaveOutEvent _output;
+    private readonly GateProvider _gate;
     private TimeSpan _startTime;
+    private long _seekMarkBytes;
     private bool _playing;
 
     private TrackPlayer(IReadOnlyList<string> wavFiles, EditTimeline timeline)
@@ -32,8 +38,10 @@ public sealed class TrackPlayer : IDisposable
         }
 
         _master = new VolumeSampleProvider(mixer);
-        _output = new WaveOutEvent { DesiredLatency = 120, NumberOfBuffers = 3 };
-        _output.Init(_master);
+        _gate = new GateProvider(this, _master);
+        _output = new WaveOutEvent { DesiredLatency = 100, NumberOfBuffers = 3 };
+        _output.Init(_gate);
+        _output.Play();
     }
 
     /// <summary>Legt den Player an. Gibt null zurück, wenn es nicht klappt (z.B. kein Audiogerät).</summary>
@@ -63,53 +71,113 @@ public sealed class TrackPlayer : IDisposable
     {
         get
         {
-            if (!_playing)
+            // Außerhalb der Sperre abfragen (NAudio hat eine eigene).
+            var position = _output.GetPosition();
+            lock (_lock)
             {
-                return _startTime;
-            }
+                if (!_playing)
+                {
+                    return _startTime;
+                }
 
-            var bytes = _output.GetPosition();
-            return _startTime + TimeSpan.FromSeconds(bytes / (double)_output.OutputWaveFormat.AverageBytesPerSecond);
+                // Erst wenn die alten Puffer abgespielt sind, ist der neue Ton zu hören.
+                var played = position - _seekMarkBytes;
+                var bytesPerSecond = (double)_output.OutputWaveFormat.AverageBytesPerSecond;
+                return _startTime + TimeSpan.FromSeconds(Math.Max(0, played) / bytesPerSecond);
+            }
         }
     }
 
     /// <summary>Startet (oder springt) ab Zeitpunkt t.</summary>
     public void Play(TimeSpan t)
     {
-        _output.Stop();
-        foreach (var reader in _readers)
+        lock (_lock)
         {
-            reader.CurrentTime = t < reader.TotalTime ? t : reader.TotalTime;
-        }
+            foreach (var reader in _readers)
+            {
+                reader.CurrentTime = t < reader.TotalTime ? t : reader.TotalTime;
+            }
 
-        foreach (var track in _tracks)
-        {
-            track.Position = t;
-        }
+            foreach (var track in _tracks)
+            {
+                track.Position = t;
+            }
 
-        _startTime = t;
-        _playing = true;
-        _output.Play();
+            _startTime = t;
+            _seekMarkBytes = _gate.WrittenBytes;
+            _playing = true;
+        }
     }
 
     public void Stop()
     {
-        if (_playing)
+        var position = _output.GetPosition();
+        lock (_lock)
         {
-            _startTime = Position;
-        }
+            if (!_playing)
+            {
+                return;
+            }
 
-        _playing = false;
-        _output.Stop();
+            var played = position - _seekMarkBytes;
+            _startTime += TimeSpan.FromSeconds(Math.Max(0, played) / (double)_output.OutputWaveFormat.AverageBytesPerSecond);
+            _playing = false;
+        }
     }
 
     public void Dispose()
     {
         _output.Stop();
         _output.Dispose();
-        foreach (var reader in _readers)
+        lock (_lock)
         {
-            reader.Dispose();
+            foreach (var reader in _readers)
+            {
+                reader.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ganz oben in der Kette: bei Pause Stille, sonst die gemischten Spuren. Zählt, wie viel schon
+    /// an die Soundkarte gegangen ist (damit die Position nach einem Sprung stimmt).
+    /// </summary>
+    private sealed class GateProvider : ISampleProvider
+    {
+        private readonly TrackPlayer _owner;
+        private readonly ISampleProvider _source;
+
+        public GateProvider(TrackPlayer owner, ISampleProvider source)
+        {
+            _owner = owner;
+            _source = source;
+        }
+
+        public long WrittenBytes { get; private set; }
+
+        public WaveFormat WaveFormat => _source.WaveFormat;
+
+        public int Read(float[] buffer, int offset, int count)
+        {
+            lock (_owner._lock)
+            {
+                if (_owner._playing)
+                {
+                    var read = _source.Read(buffer, offset, count);
+                    if (read < count)
+                    {
+                        Array.Clear(buffer, offset + read, count - read);
+                    }
+                }
+                else
+                {
+                    Array.Clear(buffer, offset, count);
+                }
+
+                // Immer volle Puffer liefern, sonst hört die Ausgabe auf.
+                WrittenBytes += count * 4L;
+                return count;
+            }
         }
     }
 

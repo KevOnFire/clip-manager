@@ -22,6 +22,7 @@
   <ItemGroup>
     <Resource Include="Assets\clippy.png" />
     <Resource Include="Assets\clippy.ico" />
+    <Resource Include="Assets\clippy-silhouette.png" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ClipManager.Core\ClipManager.Core.csproj" />
