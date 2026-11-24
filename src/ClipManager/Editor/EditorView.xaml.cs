@@ -60,6 +60,11 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
         // Ton nur beim Abspielen. Sonst spielt der Player beim Springen/Ziehen kurze Tonfetzen ab.
         Player.IsMuted = true;
+        if (App.Settings.CorrectVideoColors)
+        {
+            Player.Effect = VideoLevelsEffect.TryCreate();
+        }
+
         Player.Source = new Uri(clip.Path);
         Loaded += (_, _) =>
         {
@@ -109,7 +114,18 @@ public partial class EditorView : System.Windows.Controls.UserControl
     /// <summary>Wird ausgelöst, wenn sich die gespeicherten Schnitte eines Clips ändern (für die Kacheln).</summary>
     public static event EventHandler<string>? EditsSaved;
 
-    private TimeSpan Position => Player.Position;
+    /// <summary>
+    /// Aktuelle Stelle. Beim Abspielen mit Tonspuren gibt der Ton den Takt vor: der Windows-Player meldet
+    /// nach einem Sprung eine Weile alte Positionen, und den Ton danach zurückzusetzen war hörbar
+    /// (Stück doppelt). Ein Bild nachzuziehen fällt dagegen kaum auf.
+    /// </summary>
+    private TimeSpan Position => !_playing ? _pausedAt : _audio != null ? _audio.Position : Player.Position;
+
+    /// <summary>
+    /// Stelle im Pausenzustand. Wird selbst gemerkt, weil der Windows-Player nach dem Setzen der
+    /// Position noch eine Weile die alte meldet; sonst ging es nach dem Ziehen an der falschen Stelle weiter.
+    /// </summary>
+    private TimeSpan _pausedAt;
 
     /// <summary>Ton kommt aus den einzelnen Spuren (sonst aus dem Windows-Player).</summary>
     private bool UsesTrackAudio => _audio != null;
@@ -224,7 +240,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
             Player.IsMuted = true;
             if (_playing)
             {
-                _audio.Play(Position);
+                _audio.Play(Player.Position);
             }
         }
         catch (Exception ex)
@@ -328,14 +344,15 @@ public partial class EditorView : System.Windows.Controls.UserControl
                 return;
             }
 
-            // Ton der Spuren am Bild ausrichten, wenn sie auseinanderlaufen.
-            if (_audio != null && DateTime.UtcNow - _lastAudioSync > TimeSpan.FromMilliseconds(700)
-                && DateTime.UtcNow - _lastSeekAt > TimeSpan.FromMilliseconds(800))
+            // Bild am Ton ausrichten, wenn sie auseinanderlaufen (der Ton wird nie zurückgesetzt).
+            // Nach einem Sprung braucht der Windows-Player etwas, bis seine Position wieder stimmt.
+            if (_audio != null && DateTime.UtcNow - _lastAudioSync > TimeSpan.FromMilliseconds(1500)
+                && DateTime.UtcNow - _lastSeekAt > TimeSpan.FromMilliseconds(1500))
             {
-                var drift = (_audio.Position - pos).Duration();
-                if (drift > TimeSpan.FromMilliseconds(150))
+                var drift = (Player.Position - pos).Duration();
+                if (drift > TimeSpan.FromMilliseconds(200))
                 {
-                    _audio.Play(pos);
+                    Player.Position = pos;
                 }
 
                 _lastAudioSync = DateTime.UtcNow;
@@ -358,12 +375,19 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
     private void SetPlaying(bool playing)
     {
+        if (!playing && _playing)
+        {
+            _audio?.Stop();
+            _pausedAt = Position;
+        }
+
+        var resumeAt = _pausedAt;
         _playing = playing;
         if (playing)
         {
             Player.IsMuted = UsesTrackAudio;
             Player.Play();
-            _audio?.Play(Position);
+            _audio?.Play(resumeAt);
             // Der Windows-Player braucht nach dem Start oder einem Sprung etwas, bis seine Position
             // wieder läuft. So lange nicht nachziehen, sonst springt der Ton zurück und man hört Stellen doppelt.
             _lastAudioSync = DateTime.UtcNow;
@@ -373,7 +397,11 @@ public partial class EditorView : System.Windows.Controls.UserControl
         {
             Player.Pause();
             Player.IsMuted = true;
-            _audio?.Stop();
+            if (_audio != null)
+            {
+                // Bild genau dort anhalten, wo der Ton aufgehört hat.
+                Player.Position = _pausedAt;
+            }
         }
 
         PlayButton.Icon = new SymbolIcon { Symbol = playing ? SymbolRegular.Pause24 : SymbolRegular.Play24, Filled = true };
@@ -406,6 +434,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
         t = t < TimeSpan.Zero ? TimeSpan.Zero : t > _timeline.Duration ? _timeline.Duration : t;
         _lastSeekAt = DateTime.UtcNow;
+        _pausedAt = t;
         Player.Position = t;
         TimelineView.Position = t;
         UpdatePositionText(t);
@@ -426,6 +455,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
         t = t < TimeSpan.Zero ? TimeSpan.Zero : t > _timeline.Duration ? _timeline.Duration : t;
         _pendingSeek = t;
+        _pausedAt = t;
         _lastSeekAt = DateTime.UtcNow;
         TimelineView.Position = t;
         UpdatePositionText(t);

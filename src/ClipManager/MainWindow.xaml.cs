@@ -21,7 +21,55 @@ public partial class MainWindow : FluentWindow
         InitializeComponent();
         VersionText.Text = $"Version {AppUpdater.CurrentVersionText}";
         ShowLibrary();
+        ApplySavedBounds();
         Loaded += async (_, _) => ShowUpdate(await AppUpdater.CheckAsync());
+    }
+
+    /// <summary>Fenster so groß und dort öffnen, wo es beim letzten Beenden war.</summary>
+    private void ApplySavedBounds()
+    {
+        var saved = App.Settings.Window?.FitInto(
+            SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight, MinWidth, MinHeight);
+        if (saved == null)
+        {
+            return;
+        }
+
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = saved.Left;
+        Top = saved.Top;
+        Width = saved.Width;
+        Height = saved.Height;
+        if (saved.Maximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    private void SaveBounds()
+    {
+        try
+        {
+            var fullscreen = AppTitleBar.Visibility != Visibility.Visible;
+            var maximized = fullscreen ? _stateBeforeFullscreen == WindowState.Maximized : WindowState == WindowState.Maximized;
+            // RestoreBounds = normale Größe, auch wenn das Fenster gerade maximiert ist.
+            var r = WindowState == WindowState.Normal && !fullscreen ? new Rect(Left, Top, ActualWidth, ActualHeight) : RestoreBounds;
+            if (r.IsEmpty || r.Width <= 0 || r.Height <= 0)
+            {
+                return;
+            }
+
+            App.Settings.Window = new Core.Settings.WindowBounds
+            {
+                Left = r.Left, Top = r.Top, Width = r.Width, Height = r.Height, Maximized = maximized,
+            };
+            App.SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            Core.Log.Error("Fenstergröße konnte nicht gespeichert werden", ex);
+        }
     }
 
     /// <summary>Zeigt den Update-Knopf an (oder versteckt ihn bei null).</summary>
@@ -195,6 +243,12 @@ public partial class MainWindow : FluentWindow
         {
             _editor.HandleKey(e);
         }
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        SaveBounds();
+        base.OnClosing(e);
     }
 
     protected override void OnClosed(EventArgs e)

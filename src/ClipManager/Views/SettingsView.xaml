@@ -64,6 +64,12 @@
                         Checked="SubfoldersSwitch_Changed"
                         Content="Unterordner mit durchsuchen"
                         Unchecked="SubfoldersSwitch_Changed" />
+                    <ui:ToggleSwitch
+                        x:Name="VideoColorsSwitch"
+                        Margin="0,10,0,0"
+                        Checked="VideoColorsSwitch_Changed"
+                        Content="Kräftigere Farben im Player (aus, falls das Bild zu dunkel wirkt)"
+                        Unchecked="VideoColorsSwitch_Changed" />
                 </StackPanel>
             </Border>
 

@@ -23,6 +23,8 @@
     <Resource Include="Assets\clippy.png" />
     <Resource Include="Assets\clippy.ico" />
     <Resource Include="Assets\clippy-silhouette.png" />
+    <!-- Wird im GitHub-Build aus Editor\Shaders\VideoLevels.fx übersetzt (fxc gibt es nur unter Windows). -->
+    <Resource Include="Editor\Shaders\VideoLevels.ps" Condition="Exists('Editor\Shaders\VideoLevels.ps')" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ClipManager.Core\ClipManager.Core.csproj" />
