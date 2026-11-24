@@ -36,7 +36,10 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
     public EditorView(ClipFile clip, MediaInfo? info)
     {
+        // Vorher lesen: InitializeComponent setzt den Regler auf den Startwert und löst ValueChanged aus.
+        var volume = Math.Clamp(App.Settings.PreviewVolume, 0, 1);
         InitializeComponent();
+        VolumeSlider.Value = volume;
         _clip = clip;
         _knownDuration = info?.Duration;
         _info = info;
@@ -753,6 +756,12 @@ public partial class EditorView : System.Windows.Controls.UserControl
         {
             _audio.Volume = (float)e.NewValue;
         }
+
+        // Gilt für alle Clips; gespeichert wird beim Schließen des Editors.
+        if (IsLoaded)
+        {
+            App.Settings.PreviewVolume = e.NewValue;
+        }
     }
 
     private void SetIn_Click(object sender, RoutedEventArgs e) => _timeline?.SetIn(Position);
@@ -923,6 +932,16 @@ public partial class EditorView : System.Windows.Controls.UserControl
         if (_closed)
         {
             return;
+        }
+
+        // Vorschau-Lautstärke merken (für den nächsten Clip und Neustart).
+        try
+        {
+            App.SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Einstellungen konnten nicht gespeichert werden", ex);
         }
 
         _closed = true;
