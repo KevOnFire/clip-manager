@@ -21,14 +21,28 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar x:Name="AppTitleBar" Grid.Row="0" Title="Clippy">
-            <ui:TitleBar.Icon>
-                <ui:ImageIcon
-                    Width="30"
-                    Height="30"
-                    Source="pack://application:,,,/Assets/clippy.png" />
-            </ui:TitleBar.Icon>
-        </ui:TitleBar>
+        <!-- Titelleiste: Icon und Name liegen selbst drüber, das eingebaute Icon wurde abgeschnitten -->
+        <ui:TitleBar x:Name="AppTitleBar" Grid.Row="0" Height="42" />
+        <StackPanel
+            x:Name="TitleLogo"
+            Grid.Row="0"
+            Margin="12,0,0,0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            IsHitTestVisible="False"
+            Orientation="Horizontal">
+            <Image
+                Width="28"
+                Height="28"
+                RenderOptions.BitmapScalingMode="HighQuality"
+                Source="pack://application:,,,/Assets/clippy.png" />
+            <TextBlock
+                Margin="10,0,0,0"
+                VerticalAlignment="Center"
+                FontSize="13"
+                Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                Text="Clippy" />
+        </StackPanel>
 
         <!-- Navigation: klein oben statt Seitenleiste, damit die Clips mehr Platz haben -->
         <DockPanel x:Name="NavBar" Grid.Row="1" Margin="16,0,16,6">

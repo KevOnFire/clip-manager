@@ -136,6 +136,7 @@ public partial class MainWindow : FluentWindow
     private void SetFullscreen(bool on)
     {
         AppTitleBar.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        TitleLogo.Visibility = AppTitleBar.Visibility;
         UpdateChrome();
         if (on)
         {
