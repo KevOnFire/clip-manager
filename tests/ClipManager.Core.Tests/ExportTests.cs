@@ -217,6 +217,15 @@ public class ExportTests
     }
 
     [Fact]
+    public void GainFilter_LauterOhneUebergangRaus()
+    {
+        var edit = new TrackEdit(0, true, 1, Array.Empty<TimeRange>()) { Ducked = new[] { new DuckRange(new TimeRange(S(3), S(5)), 6, 0.5, 0) } };
+        Assert.Equal(
+            "asetnsamples=n=64:p=0,volume='pow(10,6*between(t,1,3)*clip((t-1)/0.5,0,1)/20)':eval=frame,",
+            ExportCommand.TrackGainFilter(edit, S(2)));
+    }
+
+    [Fact]
     public async Task RealExport_LeiserGemachteStelleIstLeiser()
     {
         var ffmpeg = FfmpegLocator.Locate(null, Environment.GetEnvironmentVariable("CLIPMANAGER_FFMPEG_DIR") ?? "-", Environment.GetEnvironmentVariable("PATH"));

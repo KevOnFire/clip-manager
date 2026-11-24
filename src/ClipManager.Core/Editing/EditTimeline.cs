@@ -150,8 +150,11 @@ public sealed class EditTimeline
         return true;
     }
 
-    /// <summary>Macht in einer Spur den Bereich a–b um <paramref name="db"/> leiser (z.B. −12), mit sanftem Übergang.</summary>
-    public bool DuckTrackRange(int index, TimeSpan a, TimeSpan b, double db)
+    /// <summary>
+    /// Ändert in einer Spur die Lautstärke im Bereich a–b um <paramref name="db"/> (minus = leiser, plus = lauter),
+    /// mit Übergang rein/raus in Sekunden.
+    /// </summary>
+    public bool DuckTrackRange(int index, TimeSpan a, TimeSpan b, double db, double fadeIn = DuckRange.FadeSeconds, double fadeOut = DuckRange.FadeSeconds)
     {
         var range = Ordered(Clamp(a), Clamp(b));
         if (TrackAt(index) is not { } track || range.Duration < MinSegment || !double.IsFinite(db))
@@ -159,7 +162,12 @@ public sealed class EditTimeline
             return false;
         }
 
-        var duck = new DuckRange(range, Math.Clamp(db, DuckRange.MinDb, -1));
+        var duck = DuckRange.Create(range, db, fadeIn, fadeOut);
+        if (duck.Db == 0)
+        {
+            return false;
+        }
+
         Mutate(() => _tracks[index] = track with { Ducked = AddDuck(track.Ducked, duck) });
         return true;
     }
@@ -197,8 +205,15 @@ public sealed class EditTimeline
         return true;
     }
 
-    /// <summary>Ändert, wie viel leiser die Stelle bei t ist.</summary>
-    public bool SetDuckDbAt(int index, TimeSpan t, double db)
+    /// <summary>Die Stelle bei t (oder null).</summary>
+    public DuckRange? DuckAt(int index, TimeSpan t)
+    {
+        var i = DuckRangeIndexAt(index, t);
+        return i < 0 ? null : _tracks[index].Ducked[i];
+    }
+
+    /// <summary>Ändert dB und Übergänge der Stelle bei t. 0 dB = Stelle entfernen.</summary>
+    public bool SetDuckAt(int index, TimeSpan t, double db, double fadeIn, double fadeOut)
     {
         var i = DuckRangeIndexAt(index, t);
         if (i < 0 || !double.IsFinite(db))
@@ -208,7 +223,18 @@ public sealed class EditTimeline
 
         var track = _tracks[index];
         var ducked = track.Ducked.ToList();
-        ducked[i] = ducked[i] with { Db = Math.Clamp(db, DuckRange.MinDb, -1) };
+        var changed = DuckRange.Create(ducked[i].Range, db, fadeIn, fadeOut);
+        if (changed.Db == 0)
+        {
+            return RemoveDuckAt(index, t);
+        }
+
+        if (changed == ducked[i])
+        {
+            return false;
+        }
+
+        ducked[i] = changed;
         Mutate(() => _tracks[index] = track with { Ducked = ducked });
         return true;
     }
@@ -643,7 +669,7 @@ public sealed class EditTimeline
                 Enabled = t.Enabled,
                 Volume = t.Volume,
                 Muted = t.Muted.Select(r => new[] { r.Start.TotalSeconds, r.End.TotalSeconds }).ToList(),
-                Ducked = t.Ducked.Select(d => new[] { d.Range.Start.TotalSeconds, d.Range.End.TotalSeconds, d.Db }).ToList(),
+                Ducked = t.Ducked.Select(d => new[] { d.Range.Start.TotalSeconds, d.Range.End.TotalSeconds, d.Db, d.FadeIn, d.FadeOut }).ToList(),
             }).ToList()
             : null,
     };
@@ -682,12 +708,18 @@ public sealed class EditTimeline
             }
 
             var ducked = new List<DuckRange>();
-            foreach (var d in (saved.Ducked ?? new List<double[]>()).Where(d => d is { Length: 3 } && double.IsFinite(d[2])))
+            foreach (var d in (saved.Ducked ?? new List<double[]>()).Where(d => d is { Length: >= 3 } && double.IsFinite(d[2])))
             {
                 var range = Ordered(Clamp(TimeSpan.FromSeconds(d[0])), Clamp(TimeSpan.FromSeconds(d[1])));
                 if (range.Duration >= MinSegment)
                 {
-                    ducked = AddDuck(ducked, new DuckRange(range, Math.Clamp(d[2], DuckRange.MinDb, -1)));
+                    var duck = d.Length >= 5
+                        ? DuckRange.Create(range, d[2], d[3], d[4])
+                        : DuckRange.Create(range, d[2]);
+                    if (duck.Db != 0)
+                    {
+                        ducked = AddDuck(ducked, duck);
+                    }
                 }
             }
 

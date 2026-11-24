@@ -31,10 +31,14 @@ public sealed class TimelineControl : FrameworkElement
     private const double GrabDistance = 9;
     private const double EdgeGrab = 6;
 
-    // Leiser gemachte Stellen: blau getönt, Linie zeigt den Lautstärke-Verlauf (oben = normal, tiefer = leiser).
+    // Stellen mit geänderter Lautstärke: blau = leiser, orange = lauter, Linie zeigt den Verlauf.
     private static readonly Brush LaneDuckBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x70, 0x20, 0x40, 0x90)));
     private static readonly Pen DuckLinePen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0x6C, 0xB4, 0xFF)), 2));
     private static readonly Brush DuckGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x6C, 0xB4, 0xFF)));
+    private static readonly Brush LaneBoostBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x60, 0x90, 0x50, 0x10)));
+    private static readonly Pen BoostLinePen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x50)), 2));
+    private static readonly Brush BoostGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x50)));
+    private static readonly Pen DuckMidPen = Frozen(new Pen(new SolidColorBrush(Color.FromArgb(0x50, 0xFF, 0xFF, 0xFF)), 1) { DashStyle = DashStyles.Dash });
     private static readonly Brush DuckTextBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xCF, 0xE6, 0xFF)));
     private static readonly Brush MutedGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xE8, 0x40, 0x4C)));
     private static readonly Brush RemovedGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0)));
@@ -742,8 +746,8 @@ public sealed class TimelineControl : FrameworkElement
     }
 
     /// <summary>
-    /// Leiser gemachte Stelle: Fläche blau getönt, darüber die Lautstärke als Linie (fällt am Anfang sanft ab,
-    /// steigt am Ende wieder an), Griffe an den Rändern und die Absenkung in dB.
+    /// Stelle mit geänderter Lautstärke: Fläche getönt (blau = leiser, orange = lauter), darüber die Lautstärke
+    /// als Linie (Mitte = normal, tiefer = leiser, höher = lauter, mit Übergängen), Griffe an den Rändern und dB.
     /// </summary>
     private void DrawDuck(DrawingContext dc, DuckRange duck, Rect lane, Rect strip)
     {
@@ -756,48 +760,56 @@ public sealed class TimelineControl : FrameworkElement
             return;
         }
 
-        dc.DrawRectangle(LaneDuckBrush, null, new Rect(left, lane.Top, right - left, lane.Height));
+        var louder = duck.Db > 0;
+        dc.DrawRectangle(louder ? LaneBoostBrush : LaneDuckBrush, null, new Rect(left, lane.Top, right - left, lane.Height));
 
-        // Linie: oben = normal laut, je leiser desto tiefer (−40 dB = ganz unten)
-        var top = lane.Top + 3;
-        var depth = Math.Clamp(-duck.Db / -DuckRange.MinDb, 0.1, 1) * (lane.Height - 6);
-        var low = top + depth;
-        var fadePx = Math.Max(1, X(duck.Range.Start + TimeSpan.FromSeconds(duck.Fade)) - startX);
+        var mid = lane.Top + lane.Height / 2;
+        var half = lane.Height / 2 - 3;
+        var level = louder
+            ? mid - Math.Clamp(duck.Db / DuckRange.MaxDb, 0.15, 1) * half
+            : mid + Math.Clamp(duck.Db / DuckRange.MinDb, 0.15, 1) * half;
+        var (fadeIn, fadeOut) = duck.Fades;
+        var inPx = X(duck.Range.Start + TimeSpan.FromSeconds(fadeIn)) - startX;
+        var outPx = endX - X(duck.Range.End - TimeSpan.FromSeconds(fadeOut));
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {
-            ctx.BeginFigure(new Point(startX, top), false, false);
-            ctx.LineTo(new Point(startX + fadePx, low), true, true);
-            ctx.LineTo(new Point(endX - fadePx, low), true, true);
-            ctx.LineTo(new Point(endX, top), true, true);
+            ctx.BeginFigure(new Point(startX, mid), false, false);
+            ctx.LineTo(new Point(startX + inPx, level), true, true);
+            ctx.LineTo(new Point(endX - outPx, level), true, true);
+            ctx.LineTo(new Point(endX, mid), true, true);
         }
 
         geometry.Freeze();
+        var pen = louder ? BoostLinePen : DuckLinePen;
         dc.PushClip(new RectangleGeometry(new Rect(left, lane.Top, right - left, lane.Height)));
-        dc.DrawGeometry(null, DuckLinePen, geometry);
+        dc.DrawLine(DuckMidPen, new Point(startX, mid), new Point(endX, mid));
+        dc.DrawGeometry(null, pen, geometry);
         dc.Pop();
 
         if (right - left > 40)
         {
             var text = new FormattedText(
-                $"{duck.Db:0} dB",
+                (louder ? "+" : "") + duck.Db.ToString("0.#", CultureInfo.InvariantCulture) + " dB",
                 CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
                 Font,
                 10,
                 DuckTextBrush,
                 VisualTreeHelper.GetDpi(this).PixelsPerDip);
-            dc.DrawText(text, new Point(left + Math.Max(fadePx, 4) + 2, Math.Min(low + 1, lane.Bottom - text.Height)));
+            var y = louder ? Math.Min(level + 2, lane.Bottom - text.Height) : Math.Max(level - text.Height - 1, lane.Top);
+            dc.DrawText(text, new Point(left + Math.Max(inPx, 4) + 2, y));
         }
 
+        var grip = louder ? BoostGripBrush : DuckGripBrush;
         if (startX >= strip.Left)
         {
-            DrawEdgeGrip(dc, startX, lane.Top, lane.Height, DuckGripBrush);
+            DrawEdgeGrip(dc, startX, lane.Top, lane.Height, grip);
         }
 
         if (endX <= strip.Right)
         {
-            DrawEdgeGrip(dc, endX, lane.Top, lane.Height, DuckGripBrush);
+            DrawEdgeGrip(dc, endX, lane.Top, lane.Height, grip);
         }
     }
 

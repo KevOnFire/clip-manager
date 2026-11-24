@@ -59,11 +59,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         TimelineView.ScrubbingChanged += Timeline_ScrubbingChanged;
         TimelineView.RangeSelected += (_, e) => ShowRangeMenu(e.Track, e.Start, e.End);
         TimelineView.MutedClicked += (_, e) => ShowMenu(("Wieder laut machen", Wpf.Ui.Controls.SymbolRegular.Speaker224, () => _timeline?.UnmuteTrackAt(e.Track, e.Time)));
-        TimelineView.DuckClicked += (_, e) => ShowMenu(
-            ("Wieder normal laut", Wpf.Ui.Controls.SymbolRegular.Speaker224, () => _timeline?.RemoveDuckAt(e.Track, e.Time)),
-            ("Etwas leiser (−6 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker124, () => _timeline?.SetDuckDbAt(e.Track, e.Time, -6)),
-            ("Leiser (−12 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker124, () => _timeline?.SetDuckDbAt(e.Track, e.Time, -12)),
-            ("Viel leiser (−20 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker024, () => _timeline?.SetDuckDbAt(e.Track, e.Time, -20)));
+        TimelineView.DuckClicked += (_, e) => _ = EditVolumeAsync(e.Track, e.Time);
         TimelineView.RemovedClicked += (_, t) => ShowMenu(("Wieder reinnehmen", Wpf.Ui.Controls.SymbolRegular.ArrowUndo24, () => _timeline?.RestoreAt(t)));
 
         Player.Volume = VolumeSlider.Value;
@@ -827,15 +823,43 @@ public partial class EditorView : System.Windows.Controls.UserControl
         var length = TimeText.Format(end - start);
         ShowMenu(
             ($"Nur in \"{name}\" stumm schalten ({length})", Wpf.Ui.Controls.SymbolRegular.SpeakerMute24, () => _timeline?.MuteTrackRange(track, start, end)),
-            ($"\"{name}\" etwas leiser (−6 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker124, () => _timeline?.DuckTrackRange(track, start, end, -6)),
-            ($"\"{name}\" leiser (−12 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker124, () => _timeline?.DuckTrackRange(track, start, end, -12)),
-            ($"\"{name}\" viel leiser (−20 dB)", Wpf.Ui.Controls.SymbolRegular.Speaker024, () => _timeline?.DuckTrackRange(track, start, end, -20)),
+            ($"Lautstärke in \"{name}\" ändern …", Wpf.Ui.Controls.SymbolRegular.Speaker224, () => _ = NewVolumeAsync(track, name, start, end)),
             ($"Aus dem ganzen Clip rausschneiden ({length})", Wpf.Ui.Controls.SymbolRegular.Cut24, () => _timeline?.RemoveRange(start, end)),
             ("Ab hier abspielen", Wpf.Ui.Controls.SymbolRegular.Play24, () =>
             {
                 Seek(start);
                 SetPlaying(true);
             }));
+    }
+
+    /// <summary>Neue Stelle mit geänderter Lautstärke: Fenster mit dB und Übergängen.</summary>
+    private async Task NewVolumeAsync(int track, string name, TimeSpan start, TimeSpan end)
+    {
+        var (choice, db, fadeIn, fadeOut) = await VolumeDialog.ShowAsync($"Lautstärke ändern – {name} ({TimeText.Format(end - start)})", null);
+        if (choice == VolumeChoice.Apply)
+        {
+            _timeline?.DuckTrackRange(track, start, end, db, fadeIn, fadeOut);
+        }
+    }
+
+    /// <summary>Klick auf eine Stelle mit geänderter Lautstärke: Werte ändern oder wieder normal.</summary>
+    private async Task EditVolumeAsync(int track, TimeSpan time)
+    {
+        if (_timeline?.DuckAt(track, time) is not { } duck)
+        {
+            return;
+        }
+
+        var name = track < _trackRows.Count ? _trackRows[track].Name : $"Spur {track + 1}";
+        var (choice, db, fadeIn, fadeOut) = await VolumeDialog.ShowAsync($"Lautstärke ändern – {name}", duck);
+        if (choice == VolumeChoice.Apply)
+        {
+            _timeline?.SetDuckAt(track, time, db, fadeIn, fadeOut);
+        }
+        else if (choice == VolumeChoice.Reset)
+        {
+            _timeline?.RemoveDuckAt(track, time);
+        }
     }
 
     private static System.Windows.Media.Color TrackColorOf(int index) =>

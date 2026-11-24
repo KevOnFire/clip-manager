@@ -203,12 +203,12 @@ public static class ExportCommand
             .Select(r => $"between(t,{F(Math.Max(0, r.Start - MuteEdge))},{F(r.End)})")
             .ToList();
 
-        // Leiser gemachte Stellen: Faktor 10^(dB·w/20), w steigt am Anfang über die Übergangszeit von 0 auf 1
-        // und fällt am Ende wieder ab (gleiche Kurve wie DuckRange.GainAt in der Vorschau).
+        // Stellen mit geänderter Lautstärke: Faktor 10^(dB·w/20), w steigt am Anfang über den Übergang rein
+        // von 0 auf 1 und fällt am Ende über den Übergang raus wieder ab (gleiche Kurve wie DuckRange.GainAt).
         var ducks = edit.Ducked
-            .Select(d => (Start: (d.Range.Start - offset).TotalSeconds, End: (d.Range.End - offset).TotalSeconds, d.Db, d.Fade))
-            .Where(d => d.End > 0 && d.Fade > 0)
-            .Select(d => $"pow(10,{F(d.Db)}*clip(min((t-{F(d.Start)})/{F(d.Fade)},({F(d.End)}-t)/{F(d.Fade)}),0,1)/20)")
+            .Select(d => (Start: (d.Range.Start - offset).TotalSeconds, End: (d.Range.End - offset).TotalSeconds, d.Db, Fades: d.Fades))
+            .Where(d => d.End > 0)
+            .Select(d => $"pow(10,{F(d.Db)}*{DuckWeight(d.Start, d.End, d.Fades.In, d.Fades.Out)}/20)")
             .ToList();
 
         if (muted.Count > 0 || ducks.Count > 0)
@@ -229,6 +229,20 @@ public static class ExportCommand
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>FFmpeg-Ausdruck für den Anteil (0–1) der Änderung bei t, siehe DuckRange.WeightAt.</summary>
+    private static string DuckWeight(double start, double end, double fadeIn, double fadeOut)
+    {
+        var up = fadeIn > 0 ? $"(t-{F(start)})/{F(fadeIn)}" : null;
+        var down = fadeOut > 0 ? $"({F(end)}-t)/{F(fadeOut)}" : null;
+        return (up, down) switch
+        {
+            (null, null) => $"between(t,{F(start)},{F(end)})",
+            (null, _) => $"between(t,{F(start)},{F(end)})*clip({down},0,1)",
+            (_, null) => $"between(t,{F(start)},{F(end)})*clip({up},0,1)",
+            _ => $"clip(min({up},{down}),0,1)",
+        };
     }
 
     /// <summary>Liest "out_time_us=..." aus der -progress-Ausgabe. Gibt null bei anderen Zeilen zurück.</summary>
