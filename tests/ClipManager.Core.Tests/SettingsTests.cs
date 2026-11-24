@@ -170,4 +170,23 @@ public class TrackDefaultTests
         // Clip mit nur einer Spur: nie ganz stumm
         Assert.Equal(new[] { 0 }, s.EnabledTracksFor(1));
     }
+
+    [Fact]
+    public void ExportZiel_WirdGemerkt()
+    {
+        var s = new AppSettings { Tier = DiscordTier.NitroBasic };
+        Assert.Equal(1, s.ExportTargetIndex());              // noch nie exportiert: Stufe aus den Einstellungen
+        s.RememberExportTarget(null);
+        Assert.Equal(3, s.ExportTargetIndex());              // volle Qualität
+        s.RememberExportTarget(DiscordTier.Nitro);
+        Assert.Equal(2, s.ExportTargetIndex());
+
+        // Übersteht Speichern/Laden als JSON
+        var json = System.Text.Json.JsonSerializer.Serialize(s);
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json)!;
+        Assert.Equal(2, loaded.ExportTargetIndex());
+
+        s.LastExportTarget = "Quatsch";
+        Assert.Equal(1, s.ExportTargetIndex());
+    }
 }
