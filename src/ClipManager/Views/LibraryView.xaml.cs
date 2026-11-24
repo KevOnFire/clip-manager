@@ -34,6 +34,8 @@ public partial class LibraryView : UserControl
     private HashSet<string> _edited = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, string> _names = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, TimeSpan> _durations = new(StringComparer.OrdinalIgnoreCase);
+    private List<ClipCategory> _categories = new();
+    private Dictionary<long, HashSet<string>> _members = new();
     private string _signature = string.Empty;
     private int _page;
     private int _refreshVersion;
@@ -65,6 +67,10 @@ public partial class LibraryView : UserControl
             await RefreshAsync(onlyIfChanged: true);
         };
         Editor.EditorView.EditsSaved += OnEditsSaved;
+        Editor.EditorView.FavoriteChanged += OnFavoriteChanged;
+        _longPressTimer.Tick += LongPress_Tick;
+        PreviewMouseLeftButtonUp += (_, _) => EndDragSelect();
+        FillShowCombo(null);
     }
 
     /// <summary>Liest die Clip-Ordner neu ein.</summary>
@@ -93,6 +99,7 @@ public partial class LibraryView : UserControl
         var subfolders = App.Settings.ScanSubfolders;
         var (clips, favorites, durations, edited, names) = await Task.Run(() =>
             (ClipScanner.Scan(folders, exportFolder, subfolders), App.Db.GetFavorites(), App.Db.GetDurations(), App.Db.GetEditedPaths(), App.Db.GetDisplayNames()));
+        LoadCategories();
 
         if (version != _refreshVersion)
         {
@@ -118,14 +125,20 @@ public partial class LibraryView : UserControl
 
     // ---------- Anzeige ----------
 
+    private object? ShowTag => (ShowCombo.SelectedItem as ComboBoxItem)?.Tag;
+
+    /// <summary>Gewählte eigene Kategorie (oder null).</summary>
+    private ClipCategory? CurrentCategory => ShowTag is long id ? _categories.FirstOrDefault(c => c.Id == id) : null;
+
     private LibraryFilter CurrentFilter() => new(
-        FavoritesOnly: ShowCombo.SelectedIndex == 1,
-        Edited: ShowCombo.SelectedIndex switch
+        FavoritesOnly: ShowTag is "fav",
+        Edited: ShowTag switch
         {
-            2 => EditedFilter.Edited,
-            3 => EditedFilter.Unedited,
+            "edited" => EditedFilter.Edited,
+            "unedited" => EditedFilter.Unedited,
             _ => EditedFilter.All,
         },
+        OnlyPaths: ShowTag is long id ? _members.GetValueOrDefault(id) ?? new HashSet<string>() : null,
         Folder: (FolderCombo.SelectedItem as FolderItem)?.Path,
         Search: SearchBox.Text,
         Sort: SortCombo.SelectedIndex switch
@@ -194,7 +207,11 @@ public partial class LibraryView : UserControl
         }
 
         var tiles = LibraryQuery.Page(_filtered, _page, PageSize)
-            .Select(c => new ClipTileViewModel(c, _favorites.Contains(c.Path), _edited.Contains(c.Path), _names.GetValueOrDefault(c.Path)))
+            .Select(c => new ClipTileViewModel(c, _favorites.Contains(c.Path), _edited.Contains(c.Path), _names.GetValueOrDefault(c.Path))
+            {
+                SelectionMode = _selecting,
+                IsSelected = _selected.Contains(c.Path),
+            })
             .ToList();
 
         TileList.ItemsSource = tiles;
@@ -204,7 +221,8 @@ public partial class LibraryView : UserControl
 
         var pages = LibraryQuery.PageCount(_filtered.Count, PageSize);
         Pager.Visibility = pages > 1 ? Visibility.Visible : Visibility.Collapsed;
-        PageText.Text = $"Seite {_page + 1} von {pages}";
+        PageText.Text = $"von {pages}";
+        PageBox.Text = (_page + 1).ToString();
         PrevButton.IsEnabled = _page > 0;
         NextButton.IsEnabled = _page < pages - 1;
 
@@ -491,7 +509,7 @@ public partial class LibraryView : UserControl
 
     private void Thumb_MouseEnter(object sender, MouseEventArgs e)
     {
-        if (sender is not Grid grid || (grid.DataContext as ClipTileViewModel) is null)
+        if (_selecting || sender is not Grid grid || (grid.DataContext as ClipTileViewModel) is null)
         {
             return;
         }
@@ -584,6 +602,15 @@ public partial class LibraryView : UserControl
     private void Tile_Click(object sender, MouseButtonEventArgs e)
     {
         StopPreviews();
+        _longPressTimer.Stop();
+        // Auswahl läuft (oder lange gedrückt): kein Editor öffnen.
+        if (_dragSelecting || _selecting)
+        {
+            EndDragSelect();
+            e.Handled = true;
+            return;
+        }
+
         if (TileOf(sender) is { } tile)
         {
             (Window.GetWindow(this) as MainWindow)?.OpenEditor(tile.Clip, tile.Info);
@@ -776,6 +803,475 @@ public partial class LibraryView : UserControl
         }
 
         await RefreshAsync();
+    }
+
+    // ---------- Eigene Kategorien ----------
+
+    private const string NewCategoryTag = "new";
+
+    private void LoadCategories()
+    {
+        try
+        {
+            _categories = App.Db.GetCategories();
+            _members = App.Db.GetCategoryMembers();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Kategorien konnten nicht geladen werden", ex);
+        }
+
+        FillShowCombo(ShowTag);
+    }
+
+    /// <summary>Filter-Liste: feste Einträge, darunter abgetrennt die eigenen Kategorien und "Neue Kategorie".</summary>
+    private void FillShowCombo(object? select)
+    {
+        _updatingFilters = true;
+        try
+        {
+            ShowCombo.Items.Clear();
+            ShowCombo.Items.Add(new ComboBoxItem { Content = "Alle Clips", Tag = "all" });
+            ShowCombo.Items.Add(new ComboBoxItem { Content = "★ Favoriten", Tag = "fav" });
+            ShowCombo.Items.Add(new ComboBoxItem { Content = "✂ Geschnitten", Tag = "edited" });
+            ShowCombo.Items.Add(new ComboBoxItem { Content = "Ungeschnitten", Tag = "unedited" });
+            ShowCombo.Items.Add(new Separator());
+            ShowCombo.Items.Add(new ComboBoxItem
+            {
+                Content = "EIGENE KATEGORIEN",
+                IsEnabled = false,
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+            });
+            foreach (var category in _categories)
+            {
+                var count = _members.GetValueOrDefault(category.Id)?.Count ?? 0;
+                ShowCombo.Items.Add(new ComboBoxItem { Content = $"🏷 {category.Name}  ({count})", Tag = category.Id });
+            }
+
+            ShowCombo.Items.Add(new ComboBoxItem { Content = "＋ Neue Kategorie …", Tag = NewCategoryTag });
+
+            var match = ShowCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => Equals(i.Tag, select) && !Equals(i.Tag, NewCategoryTag));
+            ShowCombo.SelectedItem = match ?? ShowCombo.Items[0];
+        }
+        finally
+        {
+            _updatingFilters = false;
+        }
+
+        UpdateCategoryButtons();
+    }
+
+    private void UpdateCategoryButtons()
+    {
+        var category = CurrentCategory;
+        CategoryMenuButton.Visibility = category != null ? Visibility.Visible : Visibility.Collapsed;
+        RemoveFromCategoryButton.Visibility = category != null ? Visibility.Visible : Visibility.Collapsed;
+        if (category != null)
+        {
+            RemoveFromCategoryButton.Content = $"Aus „{category.Name}“ entfernen";
+        }
+    }
+
+    private object? _lastShowTag = "all";
+
+    private async void ShowCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingFilters || !IsLoaded)
+        {
+            return;
+        }
+
+        if (ShowTag is NewCategoryTag)
+        {
+            var created = await AskNewCategoryAsync();
+            FillShowCombo(created?.Id ?? _lastShowTag);
+        }
+
+        _lastShowTag = ShowTag;
+        UpdateCategoryButtons();
+        ApplyFilter(resetPage: true);
+    }
+
+    /// <summary>Fragt nach einem Namen und legt die Kategorie an (null = abgebrochen).</summary>
+    private async Task<ClipCategory?> AskNewCategoryAsync()
+    {
+        var name = await Dialogs.PromptAsync("Neue Kategorie", "Name der Kategorie (z.B. Aces, Lustig, Fails):", string.Empty, "Anlegen");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        try
+        {
+            var category = App.Db.AddCategory(name);
+            _categories = App.Db.GetCategories();
+            return category;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Kategorie konnte nicht angelegt werden", ex);
+            await Dialogs.ErrorAsync(ex.Message);
+            return null;
+        }
+    }
+
+    private void CategoryMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (CurrentCategory is not { } category)
+        {
+            return;
+        }
+
+        var menu = new ContextMenu { PlacementTarget = CategoryMenuButton };
+        var rename = new MenuItem { Header = "Umbenennen", Icon = new Wpf.Ui.Controls.SymbolIcon { Symbol = Wpf.Ui.Controls.SymbolRegular.Rename24 } };
+        rename.Click += async (_, _) =>
+        {
+            var name = await Dialogs.PromptAsync("Kategorie umbenennen", "Neuer Name:", category.Name, "Umbenennen");
+            if (name == null)
+            {
+                return;
+            }
+
+            if (!App.Db.RenameCategory(category.Id, name))
+            {
+                await Dialogs.ErrorAsync("Der Name ist leer oder schon vergeben.");
+                return;
+            }
+
+            LoadCategories();
+        };
+        var delete = new MenuItem { Header = "Kategorie löschen", Icon = new Wpf.Ui.Controls.SymbolIcon { Symbol = Wpf.Ui.Controls.SymbolRegular.Delete24 } };
+        delete.Click += async (_, _) =>
+        {
+            var ok = await Dialogs.ConfirmAsync(
+                "Kategorie löschen",
+                $"Kategorie „{category.Name}“ löschen? Die Clips selbst bleiben, sie sind nur nicht mehr in dieser Kategorie.",
+                "Löschen");
+            if (!ok)
+            {
+                return;
+            }
+
+            App.Db.DeleteCategory(category.Id);
+            _categories = App.Db.GetCategories();
+            _members = App.Db.GetCategoryMembers();
+            FillShowCombo("all");
+            ApplyFilter(resetPage: true);
+        };
+        menu.Items.Add(rename);
+        menu.Items.Add(delete);
+        menu.IsOpen = true;
+    }
+
+    // ---------- Mehrfachauswahl ----------
+    // Start über das Kachel-Menü ("Auswählen") oder lange gedrückt halten (0,5 s). Danach: klicken oder
+    // gedrückt über Kacheln ziehen markiert (wie in der Handy-Galerie). Ein normaler Klick öffnet nie
+    // aus Versehen eine Auswahl, weil erst das lange Halten den Modus startet.
+
+    private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
+    private readonly DispatcherTimer _longPressTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    private bool _selecting;
+    private bool _dragSelecting;
+    private bool _dragValue;
+    private int _dragAnchor = -1;
+    private Dictionary<string, bool> _dragBaseline = new(StringComparer.OrdinalIgnoreCase);
+    private ClipTileViewModel? _pressTile;
+    private Point _pressPoint;
+
+    private List<ClipTileViewModel> PageTiles => (TileList.ItemsSource as IEnumerable<ClipTileViewModel>)?.ToList() ?? new List<ClipTileViewModel>();
+
+    private void SetSelecting(bool on)
+    {
+        _selecting = on;
+        if (!on)
+        {
+            _selected.Clear();
+            EndDragSelect();
+        }
+        else
+        {
+            StopPreviews();
+        }
+
+        foreach (var tile in PageTiles)
+        {
+            tile.SelectionMode = on;
+            tile.IsSelected = _selected.Contains(tile.Clip.Path);
+        }
+
+        SelectionBar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        FilterBar.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        UpdateSelectionText();
+    }
+
+    private void UpdateSelectionText()
+    {
+        SelectionText.Text = _selected.Count == 1 ? "1 Clip ausgewählt" : $"{_selected.Count} Clips ausgewählt";
+        AddToCategoryButton.IsEnabled = _selected.Count > 0;
+        RemoveFromCategoryButton.IsEnabled = _selected.Count > 0;
+        UpdateCategoryButtons();
+    }
+
+    private void SetSelected(ClipTileViewModel tile, bool selected)
+    {
+        tile.IsSelected = selected;
+        if (selected)
+        {
+            _selected.Add(tile.Clip.Path);
+        }
+        else
+        {
+            _selected.Remove(tile.Clip.Path);
+        }
+    }
+
+    private void Tile_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (TileOf(sender) is not { } tile)
+        {
+            return;
+        }
+
+        _pressTile = tile;
+        _pressPoint = e.GetPosition(this);
+        if (_selecting)
+        {
+            BeginDragSelect(tile, !tile.IsSelected);
+            return;
+        }
+
+        // Außerhalb der Auswahl: erst nach langem Halten starten.
+        _longPressTimer.Stop();
+        _longPressTimer.Start();
+    }
+
+    private void LongPress_Tick(object? sender, EventArgs e)
+    {
+        _longPressTimer.Stop();
+        if (_pressTile is not { } tile || Mouse.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        // Maus inzwischen weit weg bewegt: war wohl kein Halten.
+        if ((Mouse.GetPosition(this) - _pressPoint).Length > 12)
+        {
+            return;
+        }
+
+        SetSelecting(true);
+        BeginDragSelect(tile, true);
+    }
+
+    private void BeginDragSelect(ClipTileViewModel tile, bool value)
+    {
+        var tiles = PageTiles;
+        _dragAnchor = tiles.IndexOf(tile);
+        _dragValue = value;
+        _dragBaseline = tiles.ToDictionary(t => t.Clip.Path, t => t.IsSelected, StringComparer.OrdinalIgnoreCase);
+        _dragSelecting = true;
+        SetSelected(tile, value);
+        UpdateSelectionText();
+    }
+
+    private void Tile_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (!_dragSelecting || e.LeftButton != MouseButtonState.Pressed || TileOf(sender) is not { } tile)
+        {
+            return;
+        }
+
+        var tiles = PageTiles;
+        var current = tiles.IndexOf(tile);
+        if (current < 0 || _dragAnchor < 0)
+        {
+            return;
+        }
+
+        // Alles zwischen Start und aktueller Kachel bekommt den Wert, der Rest wieder den Stand von vorher.
+        var range = LibraryQuery.SelectionRange(_dragAnchor, current).ToHashSet();
+        for (var i = 0; i < tiles.Count; i++)
+        {
+            var value = range.Contains(i) ? _dragValue : _dragBaseline.GetValueOrDefault(tiles[i].Clip.Path);
+            SetSelected(tiles[i], value);
+        }
+
+        UpdateSelectionText();
+    }
+
+    private void EndDragSelect()
+    {
+        _longPressTimer.Stop();
+        _dragSelecting = false;
+        _dragAnchor = -1;
+    }
+
+    private void MenuSelect_Click(object sender, RoutedEventArgs e)
+    {
+        SetSelecting(true);
+        if (TileOf(sender) is { } tile)
+        {
+            SetSelected(tile, true);
+            UpdateSelectionText();
+        }
+    }
+
+    private void SelectionDone_Click(object sender, RoutedEventArgs e) => SetSelecting(false);
+
+    private void SelectPage_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var tile in PageTiles)
+        {
+            SetSelected(tile, true);
+        }
+
+        UpdateSelectionText();
+    }
+
+    private void SelectNone_Click(object sender, RoutedEventArgs e)
+    {
+        _selected.Clear();
+        foreach (var tile in PageTiles)
+        {
+            tile.IsSelected = false;
+        }
+
+        UpdateSelectionText();
+    }
+
+    private void AddToCategory_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = AddToCategoryButton };
+        foreach (var category in _categories)
+        {
+            var item = new MenuItem { Header = category.Name, Icon = new Wpf.Ui.Controls.SymbolIcon { Symbol = Wpf.Ui.Controls.SymbolRegular.Tag24 } };
+            item.Click += async (_, _) => await AddSelectionToAsync(category);
+            menu.Items.Add(item);
+        }
+
+        if (_categories.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+        }
+
+        var create = new MenuItem { Header = "Neue Kategorie …", Icon = new Wpf.Ui.Controls.SymbolIcon { Symbol = Wpf.Ui.Controls.SymbolRegular.Add24 } };
+        create.Click += async (_, _) =>
+        {
+            if (await AskNewCategoryAsync() is { } category)
+            {
+                await AddSelectionToAsync(category);
+            }
+        };
+        menu.Items.Add(create);
+        menu.IsOpen = true;
+    }
+
+    private async Task AddSelectionToAsync(ClipCategory category)
+    {
+        var paths = _selected.ToList();
+        try
+        {
+            App.Db.SetInCategory(category.Id, paths, true);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Clips konnten nicht zur Kategorie hinzugefügt werden", ex);
+            await Dialogs.ErrorAsync(ex.Message);
+            return;
+        }
+
+        _members = App.Db.GetCategoryMembers();
+        var keep = ShowTag;
+        SetSelecting(false);
+        FillShowCombo(keep);
+        SummaryText.Text = paths.Count == 1
+            ? $"1 Clip zu „{category.Name}“ hinzugefügt"
+            : $"{paths.Count} Clips zu „{category.Name}“ hinzugefügt";
+    }
+
+    private async void RemoveFromCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if (CurrentCategory is not { } category)
+        {
+            return;
+        }
+
+        try
+        {
+            App.Db.SetInCategory(category.Id, _selected.ToList(), false);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Clips konnten nicht aus der Kategorie entfernt werden", ex);
+            await Dialogs.ErrorAsync(ex.Message);
+            return;
+        }
+
+        _members = App.Db.GetCategoryMembers();
+        SetSelecting(false);
+        FillShowCombo(category.Id);
+        ApplyFilter(resetPage: false);
+    }
+
+    /// <summary>Tasten aus dem Hauptfenster, solange die Bibliothek angezeigt wird.</summary>
+    public void HandleKey(KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && _selecting)
+        {
+            SetSelecting(false);
+            e.Handled = true;
+        }
+    }
+
+    // ---------- Seite eingeben ----------
+
+    private void PageBox_GotFocus(object sender, KeyboardFocusChangedEventArgs e) => PageBox.SelectAll();
+
+    private void PageBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            var pages = LibraryQuery.PageCount(_filtered.Count, PageSize);
+            if (LibraryQuery.ParsePageInput(PageBox.Text, pages) is { } page)
+            {
+                _page = page;
+                ApplyFilter(resetPage: false);
+            }
+            else
+            {
+                PageBox.Text = (_page + 1).ToString();
+            }
+
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            PageBox.Text = (_page + 1).ToString();
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+    }
+
+    private void PageBox_LostFocus(object sender, KeyboardFocusChangedEventArgs e) => PageBox.Text = (_page + 1).ToString();
+
+    /// <summary>Im Editor wurde ein Clip zum Favoriten gemacht (oder nicht mehr).</summary>
+    private void OnFavoriteChanged(object? sender, (string Path, bool Favorite) change)
+    {
+        if (change.Favorite)
+        {
+            _favorites.Add(change.Path);
+        }
+        else
+        {
+            _favorites.Remove(change.Path);
+        }
+
+        foreach (var tile in PageTiles.Where(t => string.Equals(t.Clip.Path, change.Path, StringComparison.OrdinalIgnoreCase)))
+        {
+            tile.IsFavorite = change.Favorite;
+        }
     }
 
     private static ClipTileViewModel? TileOf(object sender) =>
