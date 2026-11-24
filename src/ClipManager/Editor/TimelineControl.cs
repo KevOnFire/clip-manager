@@ -31,6 +31,10 @@ public sealed class TimelineControl : FrameworkElement
     private const double GrabDistance = 9;
     private const double EdgeGrab = 6;
 
+    private static readonly Brush MutedGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xE8, 0x40, 0x4C)));
+    private static readonly Brush RemovedGripBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0)));
+    private static readonly Pen GripOutlinePen = Frozen(new Pen(new SolidColorBrush(Color.FromArgb(0xC0, 0x10, 0x10, 0x10)), 1));
+    private static readonly Pen GripLinePen = Frozen(new Pen(new SolidColorBrush(Color.FromArgb(0x90, 0x00, 0x00, 0x00)), 1));
     private static readonly Brush SelectionBrush = Frozen(new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0xC8, 0x3D)));
     private static readonly Pen SelectionPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xC8, 0x3D)), 1.5));
 
@@ -247,6 +251,15 @@ public sealed class TimelineControl : FrameworkElement
             if (x > inX && x < outX)
             {
                 dc.DrawLine(SplitPen, new Point(x, StripTop), new Point(x, StripTop + StripHeight));
+            }
+        }
+
+        foreach (var edge in tl.RemovedEdges)
+        {
+            var x = X(edge);
+            if (x > inX && x < outX)
+            {
+                DrawEdgeGrip(dc, x, StripTop, StripHeight, RemovedGripBrush);
             }
         }
 
@@ -732,6 +745,17 @@ public sealed class TimelineControl : FrameworkElement
                     var rect = new Rect(start, lane.Top, end - start, lane.Height);
                     dc.DrawRectangle(LaneMutedBrush, null, rect);
                     dc.DrawLine(LaneMutedPen, new Point(start, lane.Top + lane.Height / 2), new Point(end, lane.Top + lane.Height / 2));
+
+                    // Griffe an beiden Rändern: zeigen, dass man sie ziehen kann
+                    if (X(muted.Start) >= strip.Left)
+                    {
+                        DrawEdgeGrip(dc, X(muted.Start), lane.Top, lane.Height, MutedGripBrush);
+                    }
+
+                    if (X(muted.End) <= strip.Right)
+                    {
+                        DrawEdgeGrip(dc, X(muted.End), lane.Top, lane.Height, MutedGripBrush);
+                    }
                 }
             }
             else
@@ -766,6 +790,18 @@ public sealed class TimelineControl : FrameworkElement
                 dc.DrawLine(TickPen, new Point(x, lane.Top), new Point(x, lane.Bottom));
             }
         }
+    }
+
+    /// <summary>Kleiner Griff (Balken mit Rillen) an einem ziehbaren Rand.</summary>
+    private static void DrawEdgeGrip(DrawingContext dc, double x, double top, double height, Brush brush)
+    {
+        const double width = 8;
+        var h = Math.Min(height - 4, 26);
+        var rect = new Rect(x - width / 2, top + (height - h) / 2, width, h);
+        dc.DrawRoundedRectangle(brush, GripOutlinePen, rect, 3, 3);
+        var mid = rect.Top + rect.Height / 2;
+        dc.DrawLine(GripLinePen, new Point(x - 1.5, mid - 5), new Point(x - 1.5, mid + 5));
+        dc.DrawLine(GripLinePen, new Point(x + 1.5, mid - 5), new Point(x + 1.5, mid + 5));
     }
 
     /// <summary>Wellenform als Fläche, 0..width breit und -1..1 hoch. Wird pro Breite zwischengespeichert.</summary>

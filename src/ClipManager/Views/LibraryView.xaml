@@ -14,7 +14,12 @@
                     <ui:SymbolIcon Symbol="Play24" />
                 </MenuItem.Icon>
             </MenuItem>
-            <MenuItem Click="MenuRename_Click" Header="Umbenennen">
+            <MenuItem Click="MenuDisplayName_Click" Header="Namen im Programm ändern">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon Symbol="Tag24" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Click="MenuRename_Click" Header="Datei umbenennen">
                 <MenuItem.Icon>
                     <ui:SymbolIcon Symbol="Rename24" />
                 </MenuItem.Icon>
@@ -48,9 +53,13 @@
                 CornerRadius="8"
                 Cursor="Hand"
                 MouseLeftButtonUp="Tile_Click"
-                ToolTip="{Binding Name}">
+                ToolTip="{Binding ToolTipText}">
                 <StackPanel>
-                    <Grid Height="165" ClipToBounds="True">
+                    <Grid
+                        Height="165"
+                        ClipToBounds="True"
+                        MouseEnter="Thumb_MouseEnter"
+                        MouseLeave="Thumb_MouseLeave">
                         <Border Background="#FF0E0E12" CornerRadius="7,7,0,0">
                             <ui:SymbolIcon
                                 HorizontalAlignment="Center"
@@ -209,6 +218,8 @@
                 SelectionChanged="Filter_Changed">
                 <ComboBoxItem Content="Alle Clips" />
                 <ComboBoxItem Content="★ Favoriten" />
+                <ComboBoxItem Content="✂ Geschnitten" />
+                <ComboBoxItem Content="Ungeschnitten" />
             </ComboBox>
             <ComboBox
                 x:Name="FolderCombo"
@@ -226,6 +237,7 @@
                 <ComboBoxItem Content="Längste zuerst" />
                 <ComboBoxItem Content="Größte zuerst" />
                 <ComboBoxItem Content="Name A–Z" />
+                <ComboBoxItem Content="Geschnittene zuerst" />
             </ComboBox>
         </WrapPanel>
 

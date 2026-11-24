@@ -29,6 +29,49 @@ public class LibraryTests
     }
 
     [Fact]
+    public void Query_EditedAndDisplayNames()
+    {
+        var a = Clip("Replay 2026-11-01", 1);
+        var b = Clip("Replay 2026-11-02", 2);
+        var c = Clip("Replay 2026-11-03", 3);
+        var all = new[] { a, b, c };
+        var none = new HashSet<string>();
+        var durations = new Dictionary<string, TimeSpan>();
+        var edited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { a.Path };
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [b.Path] = "Ace auf Haven", [c.Path] = "Zocken" };
+
+        Assert.Equal(new[] { a }, LibraryQuery.Apply(all, new LibraryFilter(Edited: EditedFilter.Edited), none, durations, edited, names));
+        Assert.Equal(new[] { c, b }, LibraryQuery.Apply(all, new LibraryFilter(Edited: EditedFilter.Unedited), none, durations, edited, names));
+        Assert.Equal(new[] { a, c, b }, LibraryQuery.Apply(all, new LibraryFilter(Sort: ClipSort.EditedFirst), none, durations, edited, names));
+        // Suche und Sortierung nach Namen nutzen den Namen im Programm
+        Assert.Equal(new[] { b }, LibraryQuery.Apply(all, new LibraryFilter(Search: "haven"), none, durations, edited, names));
+        Assert.Equal(new[] { b, a, c }, LibraryQuery.Apply(all, new LibraryFilter(Sort: ClipSort.Name), none, durations, edited, names));
+    }
+
+    [Fact]
+    public void Db_DisplayNames()
+    {
+        using var dir = new TempDir();
+        var db = new LibraryDb(Path.Combine(dir.Path, "library.db"));
+        Assert.Null(db.GetDisplayName("a.mp4"));
+
+        db.SetDisplayName("a.mp4", "  Mein Ace ");
+        Assert.Equal("Mein Ace", db.GetDisplayName("A.MP4"));
+        db.SetDisplayName("a.mp4", "Neu");
+        Assert.Equal("Neu", db.GetDisplayNames()["a.mp4"]);
+
+        db.MovePath("a.mp4", "b.mp4");
+        Assert.Null(db.GetDisplayName("a.mp4"));
+        Assert.Equal("Neu", db.GetDisplayName("b.mp4"));
+
+        db.SetDisplayName("b.mp4", "");
+        Assert.Null(db.GetDisplayName("b.mp4"));
+        db.SetDisplayName("b.mp4", "X");
+        db.RemovePath("b.mp4");
+        Assert.Empty(db.GetDisplayNames());
+    }
+
+    [Fact]
     public void Paging_ClampsToValidPages()
     {
         var items = Enumerable.Range(1, 50).ToList();

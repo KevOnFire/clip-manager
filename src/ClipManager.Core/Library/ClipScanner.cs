@@ -10,15 +10,15 @@ public static class ClipScanner
     };
 
     /// <summary>
-    /// Findet alle Clips in den Ordnern (inklusive Unterordner), neueste zuerst.
+    /// Findet alle Clips in den Ordnern (auf Wunsch inklusive Unterordner), neueste zuerst.
     /// Ordner, die sich überschneiden, liefern jede Datei nur einmal.
     /// Dateien im Export-Ordner werden ausgelassen, damit Exporte nicht als Clips auftauchen.
     /// </summary>
-    public static IReadOnlyList<ClipFile> Scan(IEnumerable<string> folders, string? excludeFolder = null)
+    public static IReadOnlyList<ClipFile> Scan(IEnumerable<string> folders, string? excludeFolder = null, bool includeSubfolders = true)
     {
         var options = new EnumerationOptions
         {
-            RecurseSubdirectories = true,
+            RecurseSubdirectories = includeSubfolders,
             IgnoreInaccessible = true,
             AttributesToSkip = FileAttributes.Hidden | FileAttributes.System,
         };

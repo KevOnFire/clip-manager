@@ -39,4 +39,14 @@ public class ClipScannerTests
         Assert.Single(clips);
         Assert.Equal("a", clips[0].Name);
     }
+
+    [Fact]
+    public void Scan_WithoutSubfolders_OnlyTopLevel()
+    {
+        using var dir = new TempDir();
+        var top = dir.File("oben.mp4");
+        dir.File("Unterordner/tief.mp4");
+        var clips = ClipScanner.Scan(new[] { dir.Path }, includeSubfolders: false);
+        Assert.Equal(new[] { top }, clips.Select(c => c.Path));
+    }
 }

@@ -19,18 +19,36 @@ public sealed class ClipTileViewModel : INotifyPropertyChanged
     private ImageSource? _thumbnail;
     private MediaInfo? _info;
 
-    public ClipTileViewModel(ClipFile clip, bool isFavorite, bool isEdited = false)
+    public ClipTileViewModel(ClipFile clip, bool isFavorite, bool isEdited = false, string? displayName = null)
     {
         Clip = clip;
         _isFavorite = isFavorite;
         _isEdited = isEdited;
+        _displayName = displayName;
     }
+
+    private string? _displayName;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public ClipFile Clip { get; }
 
-    public string Name => Clip.Name;
+    /// <summary>Angezeigter Name: eigener Name im Programm, sonst der Dateiname.</summary>
+    public string Name => string.IsNullOrWhiteSpace(_displayName) ? Clip.Name : _displayName;
+
+    /// <summary>Eigener Name im Programm (null = Dateiname).</summary>
+    public string? DisplayName
+    {
+        get => _displayName;
+        set
+        {
+            _displayName = value;
+            OnPropertyChanged(nameof(Name));
+            OnPropertyChanged(nameof(ToolTipText));
+        }
+    }
+
+    public string ToolTipText => string.IsNullOrWhiteSpace(_displayName) ? Clip.Name : $"{_displayName}\nDatei: {Path.GetFileName(Clip.Path)}";
 
     public string DateText => Clip.ModifiedUtc.ToLocalTime().ToString("dd.MM.yyyy · HH:mm", German);
 

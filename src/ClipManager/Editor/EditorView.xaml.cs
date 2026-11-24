@@ -17,10 +17,8 @@ namespace ClipManager.Editor;
 /// herausgeholten Spuren (TrackPlayer), gemischt wie beim Export. Bis die Spuren bereit sind
 /// (oder falls das nicht klappt), spielt der Windows-Player Spur 1 ab.
 /// </summary>
-public partial class EditorWindow : FluentWindow
+public partial class EditorView : System.Windows.Controls.UserControl
 {
-    private static readonly Dictionary<string, EditorWindow> OpenWindows = new(StringComparer.OrdinalIgnoreCase);
-
     private readonly ClipFile _clip;
     private readonly TimeSpan? _knownDuration;
     private MediaInfo? _info;
@@ -36,7 +34,7 @@ public partial class EditorWindow : FluentWindow
     private DateTime _lastSeekAt = DateTime.MinValue;
     private TimeSpan? _pendingSeek;
 
-    private EditorWindow(ClipFile clip, MediaInfo? info)
+    public EditorView(ClipFile clip, MediaInfo? info)
     {
         InitializeComponent();
         _clip = clip;
@@ -47,8 +45,7 @@ public partial class EditorWindow : FluentWindow
             _fps = info.Fps;
         }
 
-        Title = $"{clip.Name} – Clip bearbeiten";
-        TitleBarControl.Title = $"{clip.Name}";
+        ClipTitle.Text = App.Db.GetDisplayName(clip.Path) ?? clip.Name;
 
         _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(25) };
         _timer.Tick += Timer_Tick;
@@ -66,31 +63,33 @@ public partial class EditorWindow : FluentWindow
         Player.Source = new Uri(clip.Path);
         Loaded += (_, _) =>
         {
+            if (_started)
+            {
+                return;
+            }
+
             // Erstes Bild anzeigen, ohne abzuspielen.
+            _started = true;
             Player.Play();
             Player.Pause();
         };
-        Closed += OnClosed;
     }
 
-    /// <summary>Öffnet den Editor für einen Clip, oder holt ein schon offenes Fenster nach vorne.</summary>
-    public static void OpenFor(ClipFile clip, MediaInfo? info, Window? owner)
-    {
-        if (OpenWindows.TryGetValue(clip.Path, out var existing))
-        {
-            if (existing.WindowState == WindowState.Minimized)
-            {
-                existing.WindowState = WindowState.Normal;
-            }
+    private bool _started;
+    private bool _closed;
+    private bool _seekDragging;
+    private bool _updatingSeek;
 
-            existing.Activate();
-            return;
-        }
+    /// <summary>Der Clip, der gerade bearbeitet wird.</summary>
+    public string ClipPath => _clip.Path;
 
-        var window = new EditorWindow(clip, info) { Owner = owner };
-        OpenWindows[clip.Path] = window;
-        window.Show();
-    }
+    /// <summary>Der Editor möchte geschlossen werden (Zurück-Knopf, Original ersetzt).</summary>
+    public event EventHandler? CloseRequested;
+
+    /// <summary>Vollbild an/aus wurde angefordert (das Hauptfenster macht das eigentliche Vollbild).</summary>
+    public event EventHandler<bool>? FullscreenRequested;
+
+    public bool IsFullscreen { get; private set; }
 
     /// <summary>Wird ausgelöst, wenn sich die gespeicherten Schnitte eines Clips ändern (für die Kacheln).</summary>
     public static event EventHandler<string>? EditsSaved;
@@ -330,6 +329,7 @@ public partial class EditorWindow : FluentWindow
 
         TimelineView.Position = pos;
         UpdatePositionText(pos);
+        UpdateSeekSlider(pos);
     }
 
     private void StopAtEnd()
@@ -495,9 +495,29 @@ public partial class EditorWindow : FluentWindow
         }
     }
 
-    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    /// <summary>Tastenkürzel. Kommt vom Hauptfenster, solange der Editor angezeigt wird.</summary>
+    public void HandleKey(KeyEventArgs e)
     {
-        if (_timeline == null || e.OriginalSource is System.Windows.Controls.TextBox)
+        if (e.OriginalSource is System.Windows.Controls.Primitives.TextBoxBase)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape && IsFullscreen)
+        {
+            SetFullscreen(false);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            SetFullscreen(!IsFullscreen);
+            e.Handled = true;
+            return;
+        }
+
+        if (_timeline == null)
         {
             return;
         }
@@ -554,7 +574,84 @@ public partial class EditorWindow : FluentWindow
         }
     }
 
-    private void Video_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => TogglePlay();
+    private void Video_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            // Doppelklick: Vollbild. Der erste Klick hat schon Play/Pause umgeschaltet, das zurücknehmen.
+            TogglePlay();
+            SetFullscreen(!IsFullscreen);
+            return;
+        }
+
+        TogglePlay();
+    }
+
+    private void Back_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void Fullscreen_Click(object sender, RoutedEventArgs e) => SetFullscreen(!IsFullscreen);
+
+    /// <summary>Vollbild: nur Video + Abspielleiste mit Spul-Leiste, Rest ausgeblendet.</summary>
+    public void SetFullscreen(bool on)
+    {
+        if (IsFullscreen == on)
+        {
+            return;
+        }
+
+        IsFullscreen = on;
+        var editing = on ? Visibility.Collapsed : Visibility.Visible;
+        HeaderBar.Visibility = editing;
+        TracksArea.Visibility = editing;
+        ToolsBar.Visibility = editing;
+        BottomBar.Visibility = editing;
+        PreviewCutsCheck.Visibility = editing;
+        SeekSlider.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        VideoBorder.Margin = on ? new Thickness(0) : new Thickness(16, 4, 16, 8);
+        VideoBorder.CornerRadius = new CornerRadius(on ? 0 : 8);
+        FullscreenButton.Icon = new SymbolIcon { Symbol = on ? SymbolRegular.FullScreenMinimize24 : SymbolRegular.FullScreenMaximize24 };
+        UpdateSeekSlider(Position);
+        FullscreenRequested?.Invoke(this, on);
+    }
+
+    private void UpdateSeekSlider(TimeSpan pos)
+    {
+        if (!IsFullscreen || _seekDragging || _timeline == null)
+        {
+            return;
+        }
+
+        _updatingSeek = true;
+        SeekSlider.Maximum = Math.Max(0.1, _timeline.Duration.TotalSeconds);
+        SeekSlider.Value = Math.Clamp(pos.TotalSeconds, 0, SeekSlider.Maximum);
+        _updatingSeek = false;
+    }
+
+    private void SeekSlider_DragStarted(object sender, System.Windows.Controls.Primitives.DragStartedEventArgs e) => _seekDragging = true;
+
+    private void SeekSlider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        _seekDragging = false;
+        Seek(TimeSpan.FromSeconds(SeekSlider.Value));
+    }
+
+    private void SeekSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_updatingSeek || _timeline == null)
+        {
+            return;
+        }
+
+        // Klick auf die Leiste oder Ziehen: hinspringen (beim Ziehen nur das Bild, Ton beim Loslassen)
+        if (_seekDragging)
+        {
+            ScrubTo(TimeSpan.FromSeconds(e.NewValue));
+        }
+        else
+        {
+            Seek(TimeSpan.FromSeconds(e.NewValue));
+        }
+    }
 
     private void PlayButton_Click(object sender, RoutedEventArgs e) => TogglePlay();
 
@@ -686,11 +783,15 @@ public partial class EditorWindow : FluentWindow
         }
 
         SetPlaying(false);
-        var dialog = new ExportWindow(_clip, _info, _timeline, saveMode, this) { Owner = this };
+        var dialog = new ExportWindow(_clip, _info, _timeline, saveMode, this) { Owner = Window.GetWindow(this) };
         dialog.ShowDialog();
         if (dialog.OriginalReplaced)
         {
             Close();
+        }
+        else
+        {
+            Focus();
         }
     }
 
@@ -712,14 +813,27 @@ public partial class EditorWindow : FluentWindow
     /// <summary>Kacheln aktualisieren, nachdem sich gespeicherte Schnitte geändert haben.</summary>
     public static void NotifyEditsChanged(string path) => EditsSaved?.Invoke(null, path);
 
-    private void OnClosed(object? sender, EventArgs e)
+    /// <summary>Editor beenden: Wiedergabe stoppen, Datei freigeben, Hauptfenster zeigt wieder die Bibliothek.</summary>
+    public void Close()
     {
-        OpenWindows.Remove(_clip.Path);
+        if (_closed)
+        {
+            return;
+        }
+
+        _closed = true;
+        SetFullscreen(false);
+        if (_timeline != null)
+        {
+            _timeline.Changed -= Timeline_Changed;
+        }
+
         _timer.Stop();
         _audio?.Dispose();
         _audio = null;
         Player.Stop();
         Player.Close();
         Player.Source = null;
+        CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -7,13 +7,23 @@ public enum ClipSort
     Longest,
     Largest,
     Name,
+    EditedFirst,
+}
+
+/// <summary>Filter: alle, nur geschnittene oder nur ungeschnittene Clips.</summary>
+public enum EditedFilter
+{
+    All,
+    Edited,
+    Unedited,
 }
 
 public sealed record LibraryFilter(
     bool FavoritesOnly = false,
     string? Folder = null,
     string? Search = null,
-    ClipSort Sort = ClipSort.Newest);
+    ClipSort Sort = ClipSort.Newest,
+    EditedFilter Edited = EditedFilter.All);
 
 /// <summary>Filtern, Sortieren und Seiten für die Bibliothek.</summary>
 public static class LibraryQuery
@@ -22,9 +32,20 @@ public static class LibraryQuery
         IEnumerable<ClipFile> clips,
         LibraryFilter filter,
         IReadOnlySet<string> favorites,
-        IReadOnlyDictionary<string, TimeSpan> durations)
+        IReadOnlyDictionary<string, TimeSpan> durations,
+        IReadOnlySet<string>? edited = null,
+        IReadOnlyDictionary<string, string>? displayNames = null)
     {
         var query = clips;
+        bool IsEdited(ClipFile c) => edited?.Contains(c.Path) == true;
+        string Title(ClipFile c) => displayNames != null && displayNames.TryGetValue(c.Path, out var n) ? n : c.Name;
+
+        query = filter.Edited switch
+        {
+            EditedFilter.Edited => query.Where(IsEdited),
+            EditedFilter.Unedited => query.Where(c => !IsEdited(c)),
+            _ => query,
+        };
 
         if (filter.FavoritesOnly)
         {
@@ -39,7 +60,8 @@ public static class LibraryQuery
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             var words = filter.Search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            query = query.Where(c => words.All(w => c.Name.Contains(w, StringComparison.OrdinalIgnoreCase)));
+            query = query.Where(c => words.All(w =>
+                c.Name.Contains(w, StringComparison.OrdinalIgnoreCase) || Title(c).Contains(w, StringComparison.OrdinalIgnoreCase)));
         }
 
         // Clips ohne bekannte Dauer landen beim Sortieren nach Länge hinten.
@@ -50,7 +72,8 @@ public static class LibraryQuery
             ClipSort.Oldest => query.OrderBy(c => c.ModifiedUtc),
             ClipSort.Longest => query.OrderByDescending(Duration).ThenByDescending(c => c.ModifiedUtc),
             ClipSort.Largest => query.OrderByDescending(c => c.SizeBytes),
-            ClipSort.Name => query.OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase),
+            ClipSort.Name => query.OrderBy(Title, StringComparer.CurrentCultureIgnoreCase),
+            ClipSort.EditedFirst => query.OrderByDescending(IsEdited).ThenByDescending(c => c.ModifiedUtc),
             _ => query.OrderByDescending(c => c.ModifiedUtc),
         };
 
