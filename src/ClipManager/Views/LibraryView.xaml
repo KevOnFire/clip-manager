@@ -21,6 +21,14 @@
                     <ui:SymbolIcon Symbol="Play24" />
                 </MenuItem.Icon>
             </MenuItem>
+            <MenuItem
+                Click="MenuMarkSeen_Click"
+                Header="Als angeschaut markieren"
+                Visibility="{Binding IsNew, Converter={StaticResource BoolToVis}}">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon Symbol="Checkmark24" />
+                </MenuItem.Icon>
+            </MenuItem>
             <MenuItem Click="MenuDisplayName_Click" Header="Namen im Programm ändern">
                 <MenuItem.Icon>
                     <ui:SymbolIcon Symbol="Tag24" />
@@ -98,21 +106,37 @@
                                 Text="{Binding DurationText}" />
                         </Border>
 
-                        <!-- Schere oben links, wenn Schnitte gespeichert sind -->
-                        <Border
+                        <!-- Oben links: "NEU" (noch nicht angeschaut) und Schere (Schnitte gespeichert) -->
+                        <StackPanel
                             Margin="8"
-                            Padding="7,3"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Top"
-                            Background="#CC000000"
-                            CornerRadius="10"
-                            ToolTip="Geschnitten (Original unverändert)"
-                            Visibility="{Binding IsEdited, Converter={StaticResource BoolToVis}}">
-                            <ui:SymbolIcon
-                                FontSize="14"
-                                Foreground="#FFFFC83D"
-                                Symbol="Cut24" />
-                        </Border>
+                            Orientation="Horizontal">
+                            <Border
+                                Margin="0,0,6,0"
+                                Padding="8,2"
+                                Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                CornerRadius="10"
+                                ToolTip="Neuer Clip, noch nicht angeschaut"
+                                Visibility="{Binding IsNew, Converter={StaticResource BoolToVis}}">
+                                <TextBlock
+                                    FontSize="11"
+                                    FontWeight="Bold"
+                                    Foreground="White"
+                                    Text="NEU" />
+                            </Border>
+                            <Border
+                                Padding="7,3"
+                                Background="#CC000000"
+                                CornerRadius="10"
+                                ToolTip="Geschnitten (Original unverändert)"
+                                Visibility="{Binding IsEdited, Converter={StaticResource BoolToVis}}">
+                                <ui:SymbolIcon
+                                    FontSize="14"
+                                    Foreground="#FFFFC83D"
+                                    Symbol="Cut24" />
+                            </Border>
+                        </StackPanel>
 
                         <!-- Auswahl unten links (nur im Auswahl-Modus) -->
                         <Border
@@ -201,6 +225,47 @@
                 </StackPanel>
                 </Grid>
             </Border>
+            <!-- Neue Clips leuchten beim Anzeigen ein paar Sekunden lang auf -->
+            <Grid IsHitTestVisible="False" Opacity="0">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsNew}" Value="True">
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation
+                                                AutoReverse="True"
+                                                BeginTime="0:0:0.3"
+                                                RepeatBehavior="3x"
+                                                Storyboard.TargetProperty="Opacity"
+                                                From="0"
+                                                To="1"
+                                                Duration="0:0:0.6">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseInOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Border
+                    BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                    BorderThickness="3"
+                    CornerRadius="8">
+                    <Border.Effect>
+                        <BlurEffect Radius="12" />
+                    </Border.Effect>
+                </Border>
+                <Border
+                    BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                    BorderThickness="2"
+                    CornerRadius="8" />
+            </Grid>
             <!-- Rahmen, wenn ausgewählt: liegt genau auf dem Kachelrand, dazu ein weicher Schein -->
             <Grid IsHitTestVisible="False" Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
                 <Border

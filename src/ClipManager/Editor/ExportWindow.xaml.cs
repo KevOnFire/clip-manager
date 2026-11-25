@@ -397,6 +397,7 @@ public partial class ExportWindow : FluentWindow
         {
             await Task.Run(() => File.Copy(_outputPath!, target, overwrite: true));
             _savedPath = target;
+            MarkSeen(target);
             ShowInExplorerButton.Visibility = Visibility.Visible;
             DoneText.Text = $"Gespeichert: {target}";
         }
@@ -442,6 +443,7 @@ public partial class ExportWindow : FluentWindow
         {
             await MoveToRecycleBinWithRetryAsync(original);
             await Task.Run(() => File.Copy(_outputPath, target, overwrite: false));
+            MarkSeen(target);
         }
         catch (Exception ex)
         {
@@ -470,6 +472,19 @@ public partial class ExportWindow : FluentWindow
 
         OriginalReplaced = true;
         Close();
+    }
+
+    /// <summary>Selbst gespeicherte Dateien nicht als "NEU" in der Bibliothek markieren.</summary>
+    private static void MarkSeen(string path)
+    {
+        try
+        {
+            App.Db.MarkSeen(new[] { path });
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"\"{path}\" konnte nicht als angeschaut gemerkt werden", ex);
+        }
     }
 
     private static async Task MoveToRecycleBinWithRetryAsync(string path)

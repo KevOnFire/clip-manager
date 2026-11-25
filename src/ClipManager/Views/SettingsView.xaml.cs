@@ -52,6 +52,9 @@ public partial class SettingsView : UserControl
             FolderList.ItemsSource = s.ClipFolders.ToList();
             SubfoldersSwitch.IsChecked = s.ScanSubfolders;
             VideoColorsSwitch.IsChecked = s.CorrectVideoColors;
+            DiskWarningSwitch.IsChecked = s.DiskWarningEnabled;
+            DiskWarningSlider.Value = Math.Clamp(s.DiskWarningPercent, 50, 99);
+            ShowDiskWarning();
             ThemeSwitch.IsChecked = s.Theme.Enabled;
             ThemeAngleSlider.Value = s.Theme.Angle;
             ThemeStrengthSlider.Value = s.Theme.ValidStrength();
@@ -175,6 +178,35 @@ public partial class SettingsView : UserControl
 
         App.Settings.CorrectVideoColors = VideoColorsSwitch.IsChecked == true;
         App.SaveSettings();
+    }
+
+    private void DiskWarningSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e) => DiskWarning_Changed(sender, e);
+
+    private void DiskWarning_Changed(object sender, RoutedEventArgs e)
+    {
+        ShowDiskWarning();
+        if (_loading || !IsLoaded)
+        {
+            return;
+        }
+
+        App.Settings.DiskWarningEnabled = DiskWarningSwitch.IsChecked == true;
+        App.Settings.DiskWarningPercent = (int)Math.Round(DiskWarningSlider.Value);
+        App.SaveSettings();
+        // Nur die Anzeige oben auffrischen, nicht mitten beim Ziehen eine Warnung aufpoppen lassen.
+        (Window.GetWindow(this) as MainWindow)?.RefreshDisk(warn: false);
+    }
+
+    private void ShowDiskWarning()
+    {
+        if (DiskWarningText == null || DiskWarningRow == null)
+        {
+            return;
+        }
+
+        DiskWarningText.Text = $"{DiskWarningSlider.Value:0} % voll";
+        DiskWarningRow.IsEnabled = DiskWarningSwitch.IsChecked == true;
+        DiskWarningRow.Opacity = DiskWarningRow.IsEnabled ? 1 : 0.5;
     }
 
     private void ChangeExportFolder_Click(object sender, RoutedEventArgs e)

@@ -108,6 +108,22 @@ public sealed class AppSettings
     /// <summary>Eigenes Design mit Farbverlauf (standardmäßig aus).</summary>
     public ThemeSettings Theme { get; set; } = new();
 
+    /// <summary>Warnen, wenn die Festplatte mit den Clips fast voll ist.</summary>
+    public bool DiskWarningEnabled { get; set; } = true;
+
+    /// <summary>Ab wie viel Prozent belegt gewarnt wird (50–99).</summary>
+    public int DiskWarningPercent { get; set; } = 95;
+
+    /// <summary>
+    /// Clips, die nach diesem Zeitpunkt gespeichert wurden und noch nicht geöffnet sind, gelten als "neu".
+    /// Wird beim ersten Start gesetzt, damit nicht alle alten Clips als neu markiert werden.
+    /// </summary>
+    public DateTime? NewClipsSince { get; set; }
+
+    /// <summary>Ist die Platte so voll, dass gewarnt werden soll?</summary>
+    public bool ShouldWarn(Storage.DiskUsage usage) =>
+        DiskWarningEnabled && usage.UsedPercent >= Math.Clamp(DiskWarningPercent, 50, 99);
+
     /// <summary>Fenstergröße und -lage vom letzten Mal (null = Standard).</summary>
     public WindowBounds? Window { get; set; }
 

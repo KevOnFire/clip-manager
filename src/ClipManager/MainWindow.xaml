@@ -71,6 +71,13 @@
                 FontSize="12"
                 Icon="{ui:SymbolIcon ArrowDownload20}"
                 Visibility="Collapsed" />
+            <!-- Freier Speicher auf den Laufwerken mit Clips (wird im Code gefüllt) -->
+            <StackPanel
+                x:Name="DiskPanel"
+                Margin="0,0,12,0"
+                VerticalAlignment="Center"
+                DockPanel.Dock="Right"
+                Orientation="Horizontal" />
             <StackPanel Orientation="Horizontal">
                 <ui:Button
                     x:Name="LibraryNav"

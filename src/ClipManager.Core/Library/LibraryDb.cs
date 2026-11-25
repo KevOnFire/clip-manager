@@ -56,7 +56,42 @@ public sealed class LibraryDb
                 category_id INTEGER NOT NULL,
                 PRIMARY KEY (path, category_id)
             );
+            CREATE TABLE IF NOT EXISTS seen (
+                path TEXT PRIMARY KEY COLLATE NOCASE
+            );
             """);
+    }
+
+    /// <summary>Clips, die schon mal im Editor geöffnet (oder als gesehen markiert) wurden.</summary>
+    public HashSet<string> GetSeen()
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT path FROM seen";
+        using var reader = command.ExecuteReader();
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (reader.Read())
+        {
+            result.Add(reader.GetString(0));
+        }
+
+        return result;
+    }
+
+    public void MarkSeen(IEnumerable<string> paths)
+    {
+        using var connection = Open();
+        using var transaction = connection.BeginTransaction();
+        foreach (var path in paths)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "INSERT OR IGNORE INTO seen (path) VALUES ($path)";
+            command.Parameters.AddWithValue("$path", path);
+            command.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
     }
 
     public HashSet<string> GetFavorites()
@@ -351,6 +386,8 @@ public sealed class LibraryDb
             DELETE FROM edits WHERE path = $new;
             DELETE FROM display_names WHERE path = $new;
             DELETE FROM clip_categories WHERE path = $new;
+            DELETE FROM seen WHERE path = $old;
+            INSERT OR IGNORE INTO seen (path) VALUES ($new);
             UPDATE clip_categories SET path = $new WHERE path = $old;
             UPDATE favorites SET path = $new WHERE path = $old;
             UPDATE media_info SET path = $new WHERE path = $old;
@@ -363,7 +400,7 @@ public sealed class LibraryDb
     /// <summary>Nach dem Löschen: Einträge entfernen.</summary>
     public void RemovePath(string path) =>
         Execute(
-            "DELETE FROM favorites WHERE path = $path; DELETE FROM media_info WHERE path = $path; DELETE FROM edits WHERE path = $path; DELETE FROM display_names WHERE path = $path; DELETE FROM clip_categories WHERE path = $path;",
+            "DELETE FROM favorites WHERE path = $path; DELETE FROM media_info WHERE path = $path; DELETE FROM edits WHERE path = $path; DELETE FROM display_names WHERE path = $path; DELETE FROM clip_categories WHERE path = $path; DELETE FROM seen WHERE path = $path;",
             ("$path", path));
 
     private SqliteConnection Open()

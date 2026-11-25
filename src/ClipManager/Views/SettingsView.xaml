@@ -154,6 +154,43 @@
                                 Unchecked="VideoColorsSwitch_Changed" />
                         </StackPanel>
                     </Border>
+
+                    <!-- Speicherplatz -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Speicherplatz" />
+                            <TextBlock Style="{StaticResource Hint}" Text="Oben in der Leiste siehst du, wie viel Platz auf der Festplatte mit deinen Clips frei ist. Clippy warnt dich einmal, wenn sie fast voll ist." />
+                            <ui:ToggleSwitch
+                                x:Name="DiskWarningSwitch"
+                                Checked="DiskWarning_Changed"
+                                Content="Warnen, wenn die Festplatte fast voll ist"
+                                Unchecked="DiskWarning_Changed" />
+                            <DockPanel x:Name="DiskWarningRow" Margin="0,12,0,0">
+                                <TextBlock
+                                    Width="90"
+                                    VerticalAlignment="Center"
+                                    DockPanel.Dock="Left"
+                                    Style="{StaticResource Label}"
+                                    Text="Warnen ab" />
+                                <TextBlock
+                                    x:Name="DiskWarningText"
+                                    Width="80"
+                                    Margin="12,0,0,0"
+                                    VerticalAlignment="Center"
+                                    DockPanel.Dock="Right"
+                                    Style="{StaticResource Label}"
+                                    Text="95 %" />
+                                <Slider
+                                    x:Name="DiskWarningSlider"
+                                    IsMoveToPointEnabled="True"
+                                    IsSnapToTickEnabled="True"
+                                    Maximum="99"
+                                    Minimum="50"
+                                    TickFrequency="1"
+                                    ValueChanged="DiskWarningSlider_Changed" />
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Export -->
