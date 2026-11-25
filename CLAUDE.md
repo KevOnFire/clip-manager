@@ -52,7 +52,10 @@ src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linu
   Export/                 ExportPlanner (Bitrate/Auflösung aus Limit), ExportCommand (FFmpeg-Filtergraph), Exporter (Lauf, Fortschritt, Größen-Check + Wiederholung)
   Updates/                UpdateChecker (GitHub-API), UpdateScript (cmd zum Ersetzen + Neustart)
 src/ClipManager/          WPF-Oberfläche (net8.0-windows)
-  App.xaml(.cs)           Start, globale Dienste (Settings, Db, Thumbnails)
+  App.xaml(.cs)           Start, globale Dienste (Settings, Db, Thumbnails). Lädt in StartAsync Schritt für Schritt und zeigt dabei den SplashWindow
+  SplashWindow            Startbildschirm (Variante A „Karte“, von Kev gewählt 25.11.2026): Logo ploppt rein, Name/Infos gleiten nach, Ladebalken mit echten
+                          Schritten (Einstellungen, FFmpeg, GPU max. 1,5 s, Clips max. 5 s), mind. ~1,7 s sichtbar, blendet dann ins Hauptfenster über.
+                          Vorschau: https://claude.ai/artifact/U5jHWWLmax7AYHAMGJDDAB
   MainWindow              Kleine Navigation oben (Bibliothek, Einstellungen, Update-Knopf), im Editor ausgeblendet; Vollbild
                           (ohne Mica, schwarzer Hintergrund, sonst wirkt das Video blass)
   Views/LibraryView       Kacheln, Seiten, Filter (Favoriten/geschnitten/ungeschnitten), Menü, Ordner-Überwachung,
