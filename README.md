@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/ClipManager/Assets/clippy.png" alt="Clippy Logo" width="160" />
+  <img src="docs/clippy-logo.png" alt="Clippy Logo" width="200" />
 </p>
 
 <h1 align="center">Clippy</h1>
