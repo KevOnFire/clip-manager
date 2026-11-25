@@ -74,6 +74,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         Player.Source = new Uri(clip.Path);
         Loaded += (_, _) =>
         {
+            WatchMonitor(true);
             if (_started)
             {
                 return;
@@ -83,10 +84,122 @@ public partial class EditorView : System.Windows.Controls.UserControl
             _started = true;
             Player.Play();
             Player.Pause();
+            _ = OpenWatchdogAsync();
         };
     }
 
     private bool _started;
+
+    // ---------- Bildschirmwechsel ----------
+    // Der Windows-Player kommt nicht damit klar, wenn das Fenster auf einen anderen Bildschirm
+    // (andere Auflösung/Skalierung/Grafikausgang) gezogen wird: Bild bleibt hängen oder ruckelt.
+    // Deshalb wird er dann an derselben Stelle neu geöffnet.
+
+    private Window? _watchedWindow;
+    private IntPtr _monitor;
+    private DispatcherTimer? _monitorTimer;
+    private bool _reopening;
+    private TimeSpan _reopenAt;
+    private bool _reopenPlay;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+    private IntPtr CurrentMonitor() =>
+        _watchedWindow == null ? IntPtr.Zero : MonitorFromWindow(new System.Windows.Interop.WindowInteropHelper(_watchedWindow).Handle, 2);
+
+    private void WatchMonitor(bool on)
+    {
+        if (_watchedWindow != null)
+        {
+            _watchedWindow.LocationChanged -= Window_Moved;
+            _watchedWindow.SizeChanged -= Window_Moved;
+            _watchedWindow.DpiChanged -= Window_Moved;
+            _watchedWindow = null;
+        }
+
+        _monitorTimer?.Stop();
+        if (!on || Window.GetWindow(this) is not { } window)
+        {
+            return;
+        }
+
+        _watchedWindow = window;
+        _monitor = CurrentMonitor();
+        window.LocationChanged += Window_Moved;
+        window.SizeChanged += Window_Moved;
+        window.DpiChanged += Window_Moved;
+    }
+
+    private void Window_Moved(object? sender, EventArgs e)
+    {
+        // Erst prüfen, wenn das Fenster nicht mehr bewegt wird.
+        if (_monitorTimer == null)
+        {
+            _monitorTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _monitorTimer.Tick += (_, _) =>
+            {
+                _monitorTimer.Stop();
+                var monitor = CurrentMonitor();
+                if (monitor != IntPtr.Zero && _monitor != IntPtr.Zero && monitor != _monitor)
+                {
+                    ReopenPlayer();
+                }
+
+                _monitor = monitor;
+            };
+        }
+
+        _monitorTimer.Stop();
+        _monitorTimer.Start();
+    }
+
+    /// <summary>
+    /// Der Windows-Player öffnet manche Clips beim ersten Mal nicht (kein Fehler, einfach nichts).
+    /// Dann nach ein paar Sekunden einmal neu versuchen.
+    /// </summary>
+    private async Task OpenWatchdogAsync()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        if (_closed || _timeline != null || _openRetried || _playerFailed)
+        {
+            return;
+        }
+
+        _openRetried = true;
+        Log.Error($"Vorschau für \"{_clip.Path}\" ist nach 6 s nicht geöffnet, neuer Versuch");
+        Player.Close();
+        Player.Source = null;
+        Player.Source = new Uri(_clip.Path);
+        Player.Play();
+        Player.Pause();
+    }
+
+    private bool _openRetried;
+    private bool _playerFailed;
+
+    private void ReopenPlayer()
+    {
+        if (_closed || _timeline == null || _reopening)
+        {
+            return;
+        }
+
+        _reopenPlay = _playing;
+        if (_playing)
+        {
+            SetPlaying(false);
+        }
+
+        _reopenAt = _pausedAt;
+        _reopening = true;
+        LoadingText.Visibility = Visibility.Visible;
+        Player.Close();
+        Player.Source = null;
+        Player.Source = new Uri(_clip.Path);
+        Player.Play();
+        Player.Pause();
+    }
     private bool _closed;
     private bool _seekDragging;
     private bool _updatingSeek;
@@ -169,6 +282,20 @@ public partial class EditorView : System.Windows.Controls.UserControl
     private async void Player_MediaOpened(object sender, RoutedEventArgs e)
     {
         LoadingText.Visibility = Visibility.Collapsed;
+        if (_reopening)
+        {
+            // Player wurde nach einem Bildschirmwechsel neu geöffnet: nur die alte Stelle wiederherstellen.
+            _reopening = false;
+            Seek(_reopenAt);
+            _pendingSeek = _reopenAt;
+            if (_reopenPlay)
+            {
+                SetPlaying(true);
+            }
+
+            return;
+        }
+
         var duration = Player.NaturalDuration.HasTimeSpan ? Player.NaturalDuration.TimeSpan : _knownDuration ?? TimeSpan.Zero;
         if (duration <= TimeSpan.Zero)
         {
@@ -323,6 +450,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
     private async void ShowPlayerError(string message)
     {
+        _playerFailed = true;
         LoadingText.Text = "Vorschau nicht möglich";
         var open = await Dialogs.ConfirmAsync(
             "Vorschau nicht möglich",
@@ -382,15 +510,10 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
             // Bild am Ton ausrichten, wenn sie auseinanderlaufen (der Ton wird nie zurückgesetzt).
             // Nach einem Sprung braucht der Windows-Player etwas, bis seine Position wieder stimmt.
-            if (_audio != null && DateTime.UtcNow - _lastAudioSync > TimeSpan.FromMilliseconds(1500)
+            if (_audio != null && DateTime.UtcNow - _lastAudioSync > TimeSpan.FromMilliseconds(400)
                 && DateTime.UtcNow - _lastSeekAt > TimeSpan.FromMilliseconds(1500))
             {
-                var drift = (Player.Position - pos).Duration();
-                if (drift > TimeSpan.FromMilliseconds(200))
-                {
-                    Player.Position = pos;
-                }
-
+                SyncVideoToAudio(pos);
                 _lastAudioSync = DateTime.UtcNow;
             }
         }
@@ -398,6 +521,54 @@ public partial class EditorView : System.Windows.Controls.UserControl
         TimelineView.Position = pos;
         UpdatePositionText(pos);
         UpdateSeekSlider(pos);
+    }
+
+    /// <summary>
+    /// Bild sanft an den Ton angleichen: kleine Abweichungen holt das Bild durch etwas schnelleres oder
+    /// langsameres Abspielen auf. Gesprungen wird nur bei großer Abweichung, und dann immer seltener.
+    /// Früher wurde bei jeder Abweichung gesprungen. Bei Clips mit wenigen Schlüsselbildern dauert so ein
+    /// Sprung aber 1–2 s, danach hing das Bild wieder hinterher, und es ruckelte alle paar Sekunden.
+    /// </summary>
+    private void SyncVideoToAudio(TimeSpan pos)
+    {
+        var now = DateTime.UtcNow;
+        var behind = (pos - Player.Position).TotalMilliseconds; // > 0: Bild hängt hinterher
+        var abs = Math.Abs(behind);
+        if (abs > 1500)
+        {
+            if (now >= _nextHardSync)
+            {
+                SetVideoSpeed(1);
+                Player.Position = pos;
+                _lastSeekAt = now;
+                _nextHardSync = now + _hardSyncBackoff;
+                _hardSyncBackoff = TimeSpan.FromTicks(Math.Min(_hardSyncBackoff.Ticks * 2, TimeSpan.FromSeconds(20).Ticks));
+            }
+
+            return;
+        }
+
+        if (abs > 120)
+        {
+            SetVideoSpeed(behind > 0 ? 1.12 : 0.9);
+        }
+        else if (abs < 40)
+        {
+            SetVideoSpeed(1);
+            _hardSyncBackoff = HardSyncStart;
+        }
+    }
+
+    private static readonly TimeSpan HardSyncStart = TimeSpan.FromSeconds(3);
+    private TimeSpan _hardSyncBackoff = HardSyncStart;
+    private DateTime _nextHardSync = DateTime.MinValue;
+
+    private void SetVideoSpeed(double ratio)
+    {
+        if (Math.Abs(Player.SpeedRatio - ratio) > 0.001)
+        {
+            Player.SpeedRatio = ratio;
+        }
     }
 
     private void StopAtEnd()
@@ -432,6 +603,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         else
         {
             Player.Pause();
+            SetVideoSpeed(1);
             Player.IsMuted = true;
             if (_audio != null)
             {
@@ -471,6 +643,9 @@ public partial class EditorView : System.Windows.Controls.UserControl
         t = t < TimeSpan.Zero ? TimeSpan.Zero : t > _timeline.Duration ? _timeline.Duration : t;
         _lastSeekAt = DateTime.UtcNow;
         _pausedAt = t;
+        _hardSyncBackoff = HardSyncStart;
+        _nextHardSync = DateTime.MinValue;
+        SetVideoSpeed(1);
         Player.Position = t;
         TimelineView.Position = t;
         UpdatePositionText(t);
@@ -1014,6 +1189,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
     /// </summary>
     public void ReleaseClip()
     {
+        WatchMonitor(false);
         _timer.Stop();
         _timeline!.Changed -= Timeline_Changed;
         _audio?.Dispose();
@@ -1045,6 +1221,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         }
 
         _closed = true;
+        WatchMonitor(false);
         SetFullscreen(false);
         if (_timeline != null)
         {
