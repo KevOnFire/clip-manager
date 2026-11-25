@@ -41,20 +41,54 @@ public sealed class AudioTrackCache
         return args;
     }
 
-    /// <summary>Gibt pro Spur den WAV-Pfad zurück, oder null, wenn es nicht geklappt hat.</summary>
-    public async Task<IReadOnlyList<string>?> GetOrCreateAsync(string ffmpegPath, ClipFile clip, int trackCount, CancellationToken ct = default)
+    private readonly Dictionary<string, Task<IReadOnlyList<string>?>> _running = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gibt pro Spur den WAV-Pfad zurück, oder null, wenn es nicht geklappt hat.
+    /// Läuft für denselben Clip schon ein Auslesen (z.B. Clip schnell gewechselt und zurück),
+    /// wird darauf gewartet statt ein zweites FFmpeg auf dieselben Dateien loszulassen.
+    /// </summary>
+    public Task<IReadOnlyList<string>?> GetOrCreateAsync(string ffmpegPath, ClipFile clip, int trackCount, CancellationToken ct = default)
     {
         if (trackCount <= 0)
         {
-            return Array.Empty<string>();
+            return Task.FromResult<IReadOnlyList<string>?>(Array.Empty<string>());
         }
 
         var targets = Enumerable.Range(0, trackCount).Select(i => PathFor(clip, i)).ToList();
         if (targets.All(File.Exists))
         {
-            return targets;
+            return Task.FromResult<IReadOnlyList<string>?>(targets);
         }
 
+        var key = targets[^1];
+        lock (_running)
+        {
+            if (_running.TryGetValue(key, out var running))
+            {
+                return running;
+            }
+
+            var task = CreateAsync(ffmpegPath, clip, targets, ct);
+            _running[key] = task;
+            _ = task.ContinueWith(
+                _ =>
+                {
+                    lock (_running)
+                    {
+                        _running.Remove(key);
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return task;
+        }
+    }
+
+    private async Task<IReadOnlyList<string>?> CreateAsync(string ffmpegPath, ClipFile clip, List<string> targets, CancellationToken ct)
+    {
+        await Task.Yield();
         try
         {
             Directory.CreateDirectory(_cacheDirectory);
