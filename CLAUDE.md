@@ -60,9 +60,11 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
                           (ohne Mica, schwarzer Hintergrund, sonst wirkt das Video blass)
   Views/LibraryView       Kacheln, Seiten, Filter (Favoriten/geschnitten/ungeschnitten), Menü, Ordner-Überwachung,
                           Hover-Vorschau (stummes MediaElement in der Kachel), eigener Name im Programm (Tabelle display_names),
-                          Klick öffnet Editor im Hauptfenster
+                          Klick öffnet Editor im Hauptfenster. Auswahlmodus: Kategorie zuweisen, Massen-Löschen (Papierkorb).
+                          Auswahlrahmen liegt genau auf dem Kachelrand, Inhalt per `Views/RoundClip` rund abgeschnitten
   Editor/EditorView       Editor als Seite im Hauptfenster: Player, Vollbild, Tastenkürzel (kommen über MainWindow.PreviewKeyDown),
-                          speichert Schnitte automatisch in der DB
+                          speichert Schnitte automatisch in der DB. Oben „Löschen“ (Datei freigeben → Papierkorb → Bibliothek),
+                          unten „Speichern unter …“ und „Original überschreiben“ (Schnellspeichern) mit Text statt nur Icons
   Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf, Spur-Zeilen).
                           Bedienung: in Spur ziehen = Auswahl → Menü (stumm / Lautstärke ändern / rausschneiden), Ränder von stummen und
                           rausgeschnittenen Stellen ziehbar, Klick auf so eine Stelle = Menü (wieder laut / reinnehmen)

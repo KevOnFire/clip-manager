@@ -26,6 +26,14 @@
                 ToolTip="Zurück zur Bibliothek (Schnitte sind schon gemerkt)" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <ui:Button
+                    x:Name="DeleteClipButton"
+                    Margin="0,0,12,0"
+                    Click="DeleteClip_Click"
+                    Content="Löschen"
+                    Focusable="False"
+                    Icon="{ui:SymbolIcon Delete24}"
+                    ToolTip="Diesen Clip in den Papierkorb verschieben" />
+                <ui:Button
                     x:Name="FavoriteButton"
                     Margin="0,0,12,0"
                     Click="Favorite_Click"
@@ -262,25 +270,21 @@
                 Icon="{ui:SymbolIcon ArrowExportUp24}"
                 ToolTip="Clip passend fürs Discord-Limit exportieren" />
             <ui:Button
-                x:Name="QuickSaveButton"
-                Width="40"
-                Height="34"
+                x:Name="SaveButton"
                 Margin="8,0,0,0"
-                Padding="0"
+                Click="Save_Click"
+                Content="Speichern unter …"
+                Focusable="False"
+                Icon="{ui:SymbolIcon SaveCopy24}"
+                ToolTip="Öffnet den Speichern-Dialog: in voller Qualität als Kopie, an einen anderen Ort oder Original ersetzen" />
+            <ui:Button
+                x:Name="QuickSaveButton"
+                Margin="8,0,0,0"
                 Click="QuickSave_Click"
+                Content="Original überschreiben"
                 Focusable="False"
                 Icon="{ui:SymbolIcon Save24}"
-                ToolTip="Schnellspeichern: Original direkt mit dem geschnittenen Clip überschreiben (volle Qualität, altes Original landet im Papierkorb)" />
-            <ui:Button
-                x:Name="SaveButton"
-                Width="40"
-                Height="34"
-                Margin="8,0,0,0"
-                Padding="0"
-                Click="Save_Click"
-                Focusable="False"
-                Icon="{ui:SymbolIcon SaveArrowRight24}"
-                ToolTip="Speichern …: in voller Qualität als Kopie, woanders hin oder Original ersetzen" />
+                ToolTip="Schnellspeichern ohne Nachfrage: das Original wird durch den geschnittenen Clip ersetzt (volle Qualität, altes Original landet im Papierkorb)" />
         </StackPanel>
         <WrapPanel x:Name="ToolsBar">
             <WrapPanel.Resources>

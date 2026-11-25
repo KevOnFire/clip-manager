@@ -50,19 +50,22 @@
         </ContextMenu>
 
         <DataTemplate x:Key="TileTemplate" DataType="{x:Type local:ClipTileViewModel}">
-            <Border
+            <Grid
                 Width="296"
                 Margin="0,0,16,16"
-                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
+                Background="Transparent"
                 ContextMenu="{StaticResource TileMenu}"
-                CornerRadius="8"
                 Cursor="Hand"
                 MouseEnter="Tile_MouseEnter"
                 MouseLeftButtonDown="Tile_MouseDown"
                 MouseLeftButtonUp="Tile_Click">
-                <Grid>
+            <Border
+                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <!-- Inhalt an den runden Ecken abschneiden, damit Vorschaubild und Rahmen genau passen -->
+                <Grid local:RoundClip.Radius="7">
                 <StackPanel>
                     <Grid
                         Height="165"
@@ -196,15 +199,25 @@
                             ToolTip="Mehr" />
                     </Grid>
                 </StackPanel>
-                <!-- Rahmen, wenn ausgewählt -->
+                </Grid>
+            </Border>
+            <!-- Rahmen, wenn ausgewählt: liegt genau auf dem Kachelrand, dazu ein weicher Schein -->
+            <Grid IsHitTestVisible="False" Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}">
                 <Border
                     BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
                     BorderThickness="3"
-                    CornerRadius="7"
-                    IsHitTestVisible="False"
-                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}" />
-                </Grid>
-            </Border>
+                    CornerRadius="8"
+                    Opacity="0.8">
+                    <Border.Effect>
+                        <BlurEffect Radius="10" />
+                    </Border.Effect>
+                </Border>
+                <Border
+                    BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                    BorderThickness="2"
+                    CornerRadius="8" />
+            </Grid>
+            </Grid>
         </DataTemplate>
     </UserControl.Resources>
 
@@ -345,6 +358,14 @@
                         Content="Aus Kategorie entfernen"
                         Icon="{ui:SymbolIcon TagDismiss24}"
                         Visibility="Collapsed" />
+                    <ui:Button
+                        x:Name="DeleteSelectedButton"
+                        Margin="0,0,8,0"
+                        Appearance="Danger"
+                        Click="DeleteSelected_Click"
+                        Content="Löschen"
+                        Icon="{ui:SymbolIcon Delete24}"
+                        ToolTip="Ausgewählte Clips in den Papierkorb verschieben" />
                     <ui:Button
                         Margin="0,0,8,0"
                         Click="SelectPage_Click"

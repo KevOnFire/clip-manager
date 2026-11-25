@@ -934,6 +934,42 @@ public partial class EditorView : System.Windows.Controls.UserControl
         row.Name = App.Settings.TrackName(row.Index, _info?.AudioTracks.ElementAtOrDefault(row.Index)?.Title, _trackRows.Count);
     }
 
+    /// <summary>Clip löschen: nachfragen, Datei freigeben, in den Papierkorb, zurück zur Bibliothek.</summary>
+    private async void DeleteClip_Click(object sender, RoutedEventArgs e)
+    {
+        SetPlaying(false);
+        var ok = await Dialogs.ConfirmAsync(
+            "Clip löschen?",
+            $"\"{ClipTitle.Text}\" wird in den Papierkorb verschoben. Von dort kannst du ihn wiederherstellen.",
+            "Löschen");
+        if (!ok || _closed)
+        {
+            Focus();
+            return;
+        }
+
+        // Player und Tonspuren lassen die Datei los, sonst kann Windows sie nicht verschieben.
+        _timer.Stop();
+        _audio?.Dispose();
+        _audio = null;
+        Player.Stop();
+        Player.Close();
+        Player.Source = null;
+
+        try
+        {
+            ShellFiles.MoveToRecycleBin(_clip.Path);
+            App.Db.RemovePath(_clip.Path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Error($"\"{_clip.Path}\" konnte nicht gelöscht werden", ex);
+            await Dialogs.ErrorAsync(ex.Message);
+        }
+
+        Close();
+    }
+
     private void Save_Click(object sender, RoutedEventArgs e) => OpenExport(saveMode: true);
 
     private async void QuickSave_Click(object sender, RoutedEventArgs e)
