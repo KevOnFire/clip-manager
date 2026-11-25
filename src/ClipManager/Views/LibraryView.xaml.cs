@@ -805,6 +805,51 @@ public partial class LibraryView : UserControl
         await RefreshAsync();
     }
 
+    /// <summary>Alle ausgewählten Clips (auch auf anderen Seiten) in den Papierkorb verschieben.</summary>
+    private async void DeleteSelected_Click(object sender, RoutedEventArgs e)
+    {
+        StopPreviews();
+        var paths = _selected.ToList();
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        var what = paths.Count == 1 ? "Der ausgewählte Clip wird" : $"Die {paths.Count} ausgewählten Clips werden";
+        var ok = await Dialogs.ConfirmAsync(
+            paths.Count == 1 ? "Clip löschen?" : $"{paths.Count} Clips löschen?",
+            $"{what} in den Papierkorb verschoben. Von dort kannst du {(paths.Count == 1 ? "ihn" : "sie")} wiederherstellen.",
+            "Löschen");
+        if (!ok)
+        {
+            return;
+        }
+
+        var failed = new List<string>();
+        foreach (var path in paths)
+        {
+            try
+            {
+                ShellFiles.MoveToRecycleBin(path);
+                App.Db.RemovePath(path);
+                _selected.Remove(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Error($"\"{path}\" konnte nicht gelöscht werden", ex);
+                failed.Add(Path.GetFileName(path));
+            }
+        }
+
+        UpdateSelectionText();
+        await RefreshAsync();
+        if (failed.Count > 0)
+        {
+            var list = string.Join("\n", failed.Take(8)) + (failed.Count > 8 ? $"\n… und {failed.Count - 8} weitere" : "");
+            await Dialogs.ErrorAsync($"Diese Clips konnten nicht gelöscht werden (evtl. gerade geöffnet):\n{list}");
+        }
+    }
+
     // ---------- Eigene Kategorien ----------
 
     private const string NewCategoryTag = "new";
@@ -1015,6 +1060,7 @@ public partial class LibraryView : UserControl
         SelectionText.Text = _selected.Count == 1 ? "1 Clip ausgewählt" : $"{_selected.Count} Clips ausgewählt";
         AddToCategoryButton.IsEnabled = _selected.Count > 0;
         RemoveFromCategoryButton.IsEnabled = _selected.Count > 0;
+        DeleteSelectedButton.IsEnabled = _selected.Count > 0;
         UpdateCategoryButtons();
     }
 
