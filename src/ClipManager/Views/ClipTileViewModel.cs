@@ -100,6 +100,22 @@ public sealed class ClipTileViewModel : INotifyPropertyChanged
         }
     }
 
+    private bool _isNew;
+
+    /// <summary>Neuer Clip, der noch nicht im Editor geöffnet wurde ("NEU" + kurzes Aufleuchten).</summary>
+    public bool IsNew
+    {
+        get => _isNew;
+        set
+        {
+            if (_isNew != value)
+            {
+                _isNew = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     private bool _isSelected;
     private bool _selectionMode;
 

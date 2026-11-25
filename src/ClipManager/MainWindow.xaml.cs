@@ -1,7 +1,11 @@
 using System.Windows;
+using Wc = System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
 using ClipManager.Core.Library;
 using ClipManager.Core.Media;
+using ClipManager.Core.Storage;
 using ClipManager.Core.Updates;
 using ClipManager.Editor;
 using ClipManager.Views;
@@ -24,6 +28,98 @@ public partial class MainWindow : FluentWindow
         ApplySavedBounds();
         ApplyTheme();
         Loaded += async (_, _) => ShowUpdate(await AppUpdater.CheckAsync());
+        Loaded += (_, _) => RefreshDisk();
+        _diskTimer.Tick += (_, _) => RefreshDisk();
+        _diskTimer.Start();
+    }
+
+    // ---------- Speicherplatz ----------
+
+    private readonly DispatcherTimer _diskTimer = new() { Interval = TimeSpan.FromSeconds(30) };
+    private readonly HashSet<string> _diskWarned = new(StringComparer.OrdinalIgnoreCase);
+    private bool _diskRefreshing;
+
+    /// <summary>Freien Speicher oben anzeigen und ggf. einmal warnen. Auch nach Löschen/Einstellungen aufrufen.</summary>
+    public async void RefreshDisk(bool warn = true)
+    {
+        if (_diskRefreshing)
+        {
+            return;
+        }
+
+        _diskRefreshing = true;
+        try
+        {
+            var folders = App.Settings.ClipFolders.ToList();
+            // Laufwerke abzufragen kann bei Netzlaufwerken dauern, deshalb nicht im UI-Thread.
+            var usages = await Task.Run(() => DiskUsage.ForFolders(folders));
+            DiskPanel.Children.Clear();
+            foreach (var usage in usages)
+            {
+                var warn = App.Settings.ShouldWarn(usage);
+                DiskPanel.Children.Add(DiskItem(usage, warn));
+                if (!warn)
+                {
+                    _diskWarned.Remove(usage.Drive);
+                }
+                else if (warn && _diskWarned.Add(usage.Drive))
+                {
+                    await Dialogs.ConfirmAsync(
+                        "Festplatte fast voll",
+                        $"Laufwerk {usage.Label} ist zu {usage.UsedPercent:0} % belegt, nur noch {DiskUsage.FormatBytes(usage.FreeBytes)} frei.\n\n" +
+                        "Lösch am besten ein paar alte Clips, sonst kann OBS bald keine neuen mehr speichern.\n" +
+                        "Die Warnung kannst du in den Einstellungen unter „Allgemein“ ändern oder ausschalten.",
+                        "OK");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.Log.Error("Speicherplatz konnte nicht gelesen werden", ex);
+        }
+        finally
+        {
+            _diskRefreshing = false;
+        }
+    }
+
+    private static readonly Brush WarnBrush = new SolidColorBrush(Color.FromRgb(0xE8, 0x4A, 0x5F));
+
+    private FrameworkElement DiskItem(DiskUsage usage, bool warn)
+    {
+        const double barWidth = 56;
+        var fill = new Wc.Border { Width = Math.Max(2, barWidth * Math.Clamp(usage.UsedPercent, 0, 100) / 100), CornerRadius = new CornerRadius(2), HorizontalAlignment = HorizontalAlignment.Left };
+        var track = new Wc.Border { Width = barWidth, Height = 4, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0xFF, 0xFF)), Child = fill, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var icon = new SymbolIcon { Symbol = SymbolRegular.HardDrive20, FontSize = 15, Margin = new Thickness(0, 0, 6, 0) };
+        var text = new Wc.TextBlock { Text = $"{usage.Label} {DiskUsage.FormatBytes(usage.FreeBytes)} frei", FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        if (warn)
+        {
+            fill.Background = WarnBrush;
+            icon.Foreground = WarnBrush;
+            text.Foreground = WarnBrush;
+        }
+        else
+        {
+            fill.SetResourceReference(Wc.Border.BackgroundProperty, "AccentFillColorDefaultBrush");
+            text.SetResourceReference(Wc.TextBlock.ForegroundProperty, "TextFillColorSecondaryBrush");
+            icon.SetResourceReference(Wc.Control.ForegroundProperty, "TextFillColorSecondaryBrush");
+        }
+
+        var panel = new Wc.StackPanel { Orientation = Wc.Orientation.Horizontal };
+        panel.Children.Add(icon);
+        panel.Children.Add(text);
+        panel.Children.Add(track);
+        var item = new Wc.Border
+        {
+            Padding = new Thickness(8, 3, 8, 3),
+            Margin = new Thickness(6, 0, 0, 0),
+            CornerRadius = new CornerRadius(6),
+            Child = panel,
+            ToolTip = $"Laufwerk {usage.Label}: {usage.UsedPercent:0} % belegt, {DiskUsage.FormatBytes(usage.FreeBytes)} von {DiskUsage.FormatBytes(usage.TotalBytes)} frei" +
+                (warn ? " – fast voll!" : ""),
+        };
+        item.SetResourceReference(Wc.Border.BackgroundProperty, "CardBackgroundFillColorDefaultBrush");
+        return item;
     }
 
     /// <summary>Fenster so groß und dort öffnen, wo es beim letzten Beenden war.</summary>
@@ -157,6 +253,7 @@ public partial class MainWindow : FluentWindow
 
         CloseEditor();
         _library.StopPreviews();
+        _library.MarkSeen(clip.Path);
         var editor = new EditorView(clip, info);
         editor.CloseRequested += (_, _) =>
         {
@@ -301,6 +398,11 @@ public partial class MainWindow : FluentWindow
         LibraryNav.Appearance = ControlAppearance.Primary;
         SettingsNav.Appearance = ControlAppearance.Transparent;
         UpdateChrome();
+        if (IsLoaded)
+        {
+            RefreshDisk();
+        }
+
         return _library.RefreshAsync();
     }
 

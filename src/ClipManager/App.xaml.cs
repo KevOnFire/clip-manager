@@ -110,6 +110,12 @@ public partial class App : Application
             var dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClipManager");
             SettingsStore = new SettingsStore(Path.Combine(dataDir, "settings.json"));
             Settings = SettingsStore.Load();
+            if (Settings.NewClipsSince == null)
+            {
+                // Erster Start mit "NEU"-Markierung: nur Clips ab jetzt gelten als neu.
+                Settings.NewClipsSince = DateTime.UtcNow;
+                SaveSettings();
+            }
             Db = new LibraryDb(Path.Combine(dataDir, "library.db"));
 
             await Step("Zwischenspeicher vorbereiten …", 25);

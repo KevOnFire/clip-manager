@@ -32,6 +32,7 @@ public partial class LibraryView : UserControl
     private IReadOnlyList<ClipFile> _filtered = Array.Empty<ClipFile>();
     private HashSet<string> _favorites = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _edited = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, string> _names = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, TimeSpan> _durations = new(StringComparer.OrdinalIgnoreCase);
     private List<ClipCategory> _categories = new();
@@ -97,8 +98,8 @@ public partial class LibraryView : UserControl
 
         var exportFolder = App.ExportFolder;
         var subfolders = App.Settings.ScanSubfolders;
-        var (clips, favorites, durations, edited, names) = await Task.Run(() =>
-            (ClipScanner.Scan(folders, exportFolder, subfolders), App.Db.GetFavorites(), App.Db.GetDurations(), App.Db.GetEditedPaths(), App.Db.GetDisplayNames()));
+        var (clips, favorites, durations, edited, names, seen) = await Task.Run(() =>
+            (ClipScanner.Scan(folders, exportFolder, subfolders), App.Db.GetFavorites(), App.Db.GetDurations(), App.Db.GetEditedPaths(), App.Db.GetDisplayNames(), App.Db.GetSeen()));
         LoadCategories();
 
         if (version != _refreshVersion)
@@ -118,6 +119,7 @@ public partial class LibraryView : UserControl
         _durations = durations;
         _edited = edited;
         _names = names;
+        _seen = seen;
         UpdateSummary(analyzed: null);
         ApplyFilter(resetPage: false);
         _ = AnalyzeAllAsync(clips);
@@ -211,6 +213,7 @@ public partial class LibraryView : UserControl
             {
                 SelectionMode = _selecting,
                 IsSelected = _selected.Contains(c.Path),
+                IsNew = NewClips.IsNew(c, App.Settings.NewClipsSince, _seen),
             })
             .ToList();
 
@@ -765,7 +768,8 @@ public partial class LibraryView : UserControl
         try
         {
             SummaryText.Text = "Kopiere …";
-            await Task.Run(() => ClipFileOps.CreateCopy(tile.Clip.Path));
+            var copy = await Task.Run(() => ClipFileOps.CreateCopy(tile.Clip.Path));
+            MarkSeen(copy);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -773,6 +777,33 @@ public partial class LibraryView : UserControl
         }
 
         await RefreshAsync();
+    }
+
+    /// <summary>Clip gilt ab jetzt als angeschaut ("NEU" verschwindet).</summary>
+    public void MarkSeen(string path)
+    {
+        try
+        {
+            App.Db.MarkSeen(new[] { path });
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"\"{path}\" konnte nicht als angeschaut gemerkt werden", ex);
+        }
+
+        _seen.Add(path);
+        foreach (var tile in PageTiles.Where(t => string.Equals(t.Clip.Path, path, StringComparison.OrdinalIgnoreCase)))
+        {
+            tile.IsNew = false;
+        }
+    }
+
+    private void MenuMarkSeen_Click(object sender, RoutedEventArgs e)
+    {
+        if (TileOf(sender) is { } tile)
+        {
+            MarkSeen(tile.Clip.Path);
+        }
     }
 
     private async void MenuDelete_Click(object sender, RoutedEventArgs e)

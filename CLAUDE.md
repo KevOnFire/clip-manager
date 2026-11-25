@@ -51,17 +51,19 @@ src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linu
   Media/                  FfmpegLocator, FfmpegProbe (Version + GPU-Test), MediaInfo (ffprobe), ThumbnailCache, FilmstripCache (Zeitleiste), AudioTrackCache + Waveform (Spuren als WAV), ProcessRunner
   Export/                 ExportPlanner (Bitrate/Auflösung aus Limit), ExportCommand (FFmpeg-Filtergraph), Exporter (Lauf, Fortschritt, Größen-Check + Wiederholung)
   Updates/                UpdateChecker (GitHub-API), UpdateScript (cmd zum Ersetzen + Neustart)
+  Storage/                DiskUsage (freier Speicher der Laufwerke mit Clip-Ordnern, Anzeige oben + Warnung ab DiskWarningPercent, Standard 95 %)
 src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   App.xaml(.cs)           Start, globale Dienste (Settings, Db, Thumbnails). Lädt in StartAsync Schritt für Schritt und zeigt dabei den SplashWindow
   SplashWindow            Startbildschirm (Variante A „Karte“, von Kev gewählt 25.11.2026): Logo ploppt rein, Name/Infos gleiten nach, Ladebalken mit echten
                           Schritten (Einstellungen, FFmpeg, GPU max. 1,5 s, Clips max. 5 s), mind. ~1,7 s sichtbar, blendet dann ins Hauptfenster über.
                           Vorschau: https://claude.ai/artifact/U5jHWWLmax7AYHAMGJDDAB
-  MainWindow              Kleine Navigation oben (Bibliothek, Einstellungen, Update-Knopf), im Editor ausgeblendet; Vollbild
+  MainWindow              Kleine Navigation oben (Bibliothek, Einstellungen, freier Speicher, Update-Knopf), im Editor ausgeblendet; Vollbild
                           (ohne Mica, schwarzer Hintergrund, sonst wirkt das Video blass)
   Views/LibraryView       Kacheln, Seiten, Filter (Favoriten/geschnitten/ungeschnitten), Menü, Ordner-Überwachung,
                           Hover-Vorschau (stummes MediaElement in der Kachel), eigener Name im Programm (Tabelle display_names),
                           Klick öffnet Editor im Hauptfenster. Auswahlmodus: Kategorie zuweisen, Massen-Löschen (Papierkorb).
-                          Auswahlrahmen liegt genau auf dem Kachelrand, Inhalt per `Views/RoundClip` rund abgeschnitten
+                          Auswahlrahmen liegt genau auf dem Kachelrand, Inhalt per `Views/RoundClip` rund abgeschnitten.
+                          Neue Clips (gespeichert nach `NewClipsSince`, noch nie im Editor geöffnet, Tabelle `seen`): „NEU“ + kurzes Aufleuchten
   Editor/EditorView       Editor als Seite im Hauptfenster: Player, Vollbild, Tastenkürzel (kommen über MainWindow.PreviewKeyDown),
                           speichert Schnitte automatisch in der DB. Oben „Löschen“ (Datei freigeben → Papierkorb → Bibliothek),
                           unten „Speichern unter …“ und „Original überschreiben“ (Schnellspeichern) mit Text statt nur Icons
@@ -104,7 +106,7 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | Was | Wo |
 | --- | --- |
 | Einstellungen (auch Fenstergröße, Vorschau-Lautstärke, Design) | `%AppData%\ClipManager\settings.json` |
-| Favoriten, Clip-Infos, Schnitte (Tabelle `edits`), eigene Namen (`display_names`), Kategorien (`categories`, `clip_categories`) | `%AppData%\ClipManager\library.db` |
+| Favoriten, Clip-Infos, Schnitte (Tabelle `edits`), eigene Namen (`display_names`), Kategorien (`categories`, `clip_categories`), angeschaute Clips (`seen`) | `%AppData%\ClipManager\library.db` |
 | Vorschaubilder, Filmstreifen | `%LocalAppData%\ClipManager\thumbs\` |
 | Tonspuren als WAV (Cache, 3 Tage) | `%LocalAppData%\ClipManager\audio\` |
 | Zwischen-Exporte (2 Tage) | `%TEMP%\ClipManager\Export\` |
