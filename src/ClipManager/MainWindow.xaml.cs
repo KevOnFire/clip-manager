@@ -20,7 +20,7 @@ public partial class MainWindow : FluentWindow
     {
         InitializeComponent();
         VersionText.Text = $"Version {AppUpdater.CurrentVersionText}";
-        ShowLibrary();
+        FirstLoad = ShowLibrary();
         ApplySavedBounds();
         ApplyTheme();
         Loaded += async (_, _) => ShowUpdate(await AppUpdater.CheckAsync());
@@ -291,14 +291,17 @@ public partial class MainWindow : FluentWindow
         base.OnClosed(e);
     }
 
-    private void ShowLibrary()
+    /// <summary>Erstes Einlesen der Clips (der Startbildschirm wartet darauf).</summary>
+    public Task FirstLoad { get; }
+
+    private Task ShowLibrary()
     {
         CloseEditor();
         PageHost.Content = _library;
         LibraryNav.Appearance = ControlAppearance.Primary;
         SettingsNav.Appearance = ControlAppearance.Transparent;
         UpdateChrome();
-        _ = _library.RefreshAsync();
+        return _library.RefreshAsync();
     }
 
     private void ShowSettings()

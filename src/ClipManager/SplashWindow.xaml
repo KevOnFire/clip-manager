@@ -1,0 +1,208 @@
+<Window
+    x:Class="ClipManager.SplashWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Clippy"
+    AllowsTransparency="True"
+    Background="Transparent"
+    Icon="pack://application:,,,/Assets/clippy.ico"
+    ResizeMode="NoResize"
+    ShowActivated="True"
+    SizeToContent="WidthAndHeight"
+    WindowStartupLocation="CenterScreen"
+    WindowStyle="None">
+    <!-- Startbildschirm (Variante A "Karte"): dunkle Karte mit Logo, Name, Ladebalken und Infos.
+         Rand außen, damit der Schatten Platz hat. -->
+    <Grid Margin="40">
+        <Border
+            x:Name="Card"
+            Width="460"
+            BorderBrush="#2C2540"
+            BorderThickness="1"
+            CornerRadius="16"
+            Opacity="0">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Offset="0" Color="#1D1830" />
+                    <GradientStop Offset="0.55" Color="#17141F" />
+                    <GradientStop Offset="1" Color="#1A1220" />
+                </LinearGradientBrush>
+            </Border.Background>
+            <Border.Effect>
+                <DropShadowEffect
+                    BlurRadius="40"
+                    Opacity="0.6"
+                    ShadowDepth="10"
+                    Color="Black" />
+            </Border.Effect>
+            <Border.RenderTransformOrigin>0.5,0.5</Border.RenderTransformOrigin>
+            <Border.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="CardScale" ScaleX="0.97" ScaleY="0.97" />
+                    <TranslateTransform x:Name="CardShift" Y="16" />
+                </TransformGroup>
+            </Border.RenderTransform>
+
+            <Grid x:Name="Inner" ClipToBounds="True">
+                <!-- Großes Logo leicht im Hintergrund, schwebt langsam -->
+                <Image
+                    x:Name="BackgroundLogo"
+                    Width="300"
+                    Margin="0,0,-70,-80"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    IsHitTestVisible="False"
+                    Opacity="0.08"
+                    RenderOptions.BitmapScalingMode="HighQuality"
+                    RenderTransformOrigin="0.5,0.5"
+                    Source="pack://application:,,,/Assets/clippy-large.png">
+                    <Image.RenderTransform>
+                        <TransformGroup>
+                            <RotateTransform x:Name="BackgroundRotate" Angle="-8" />
+                            <TranslateTransform x:Name="BackgroundShift" />
+                        </TransformGroup>
+                    </Image.RenderTransform>
+                </Image>
+
+                <Grid Margin="26,26,26,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Image
+                        x:Name="Logo"
+                        Grid.RowSpan="2"
+                        Width="96"
+                        Height="96"
+                        Margin="0,0,18,0"
+                        Opacity="0"
+                        RenderOptions.BitmapScalingMode="HighQuality"
+                        RenderTransformOrigin="0.5,0.5"
+                        Source="pack://application:,,,/Assets/clippy-large.png">
+                        <Image.Effect>
+                            <DropShadowEffect
+                                BlurRadius="18"
+                                Opacity="0.4"
+                                ShadowDepth="6"
+                                Color="#6B4FD8" />
+                        </Image.Effect>
+                        <Image.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform x:Name="LogoScale" ScaleX="0.6" ScaleY="0.6" />
+                                <RotateTransform x:Name="LogoRotate" Angle="-12" />
+                            </TransformGroup>
+                        </Image.RenderTransform>
+                    </Image>
+
+                    <TextBlock
+                        x:Name="NameText"
+                        Grid.Column="1"
+                        VerticalAlignment="Bottom"
+                        FontFamily="Segoe UI Variable Display, Segoe UI"
+                        FontSize="40"
+                        FontWeight="SemiBold"
+                        Foreground="#F1EEF8"
+                        Opacity="0"
+                        Text="Clippy">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="NameShift" Y="10" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+
+                    <TextBlock
+                        x:Name="TagText"
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Margin="2,4,0,0"
+                        VerticalAlignment="Top"
+                        FontSize="14"
+                        Foreground="#A39CB8"
+                        Opacity="0"
+                        Text="OBS-Clips schneiden &amp; teilen">
+                        <TextBlock.RenderTransform>
+                            <TranslateTransform x:Name="TagShift" Y="10" />
+                        </TextBlock.RenderTransform>
+                    </TextBlock>
+
+                    <!-- Ladebalken, Schritt und Infos -->
+                    <StackPanel
+                        x:Name="Bottom"
+                        Grid.Row="2"
+                        Grid.ColumnSpan="2"
+                        Margin="0,20,0,0"
+                        Opacity="0">
+                        <StackPanel.RenderTransform>
+                            <TranslateTransform x:Name="BottomShift" Y="10" />
+                        </StackPanel.RenderTransform>
+
+                        <Grid Height="6">
+                            <Border Background="#1FFFFFFF" CornerRadius="3" />
+                            <Border
+                                x:Name="BarFill"
+                                CornerRadius="3"
+                                RenderTransformOrigin="0,0.5">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Offset="0" Color="#6B4FD8" />
+                                        <GradientStop Offset="0.6" Color="#9A7BFF" />
+                                        <GradientStop Offset="1" Color="#D26BB0" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.Effect>
+                                    <DropShadowEffect
+                                        BlurRadius="12"
+                                        Opacity="0.7"
+                                        ShadowDepth="0"
+                                        Color="#9A7BFF" />
+                                </Border.Effect>
+                                <Border.RenderTransform>
+                                    <ScaleTransform x:Name="BarScale" ScaleX="0" />
+                                </Border.RenderTransform>
+                            </Border>
+                        </Grid>
+
+                        <DockPanel Margin="0,8,0,0">
+                            <TextBlock
+                                x:Name="PercentText"
+                                DockPanel.Dock="Right"
+                                FontSize="12"
+                                Foreground="#A39CB8"
+                                Text="0 %" />
+                            <TextBlock
+                                x:Name="StepText"
+                                FontSize="12"
+                                Foreground="#A39CB8"
+                                Text="Startet …"
+                                TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+
+                        <DockPanel Margin="0,10,0,0" LastChildFill="False">
+                            <TextBlock DockPanel.Dock="Left" FontSize="11" Foreground="#7D7593">
+                                <Run Text="Version" />
+                                <Run x:Name="VersionRun" Foreground="#A39CB8" Text="0.0.0" />
+                            </TextBlock>
+                            <TextBlock DockPanel.Dock="Right" FontSize="11" Foreground="#7D7593">
+                                <Run Text="Logo &amp; Name:" />
+                                <Run Foreground="#A39CB8" Text="Yippie" />
+                            </TextBlock>
+                            <TextBlock
+                                Margin="18,0,0,0"
+                                DockPanel.Dock="Left"
+                                FontSize="11"
+                                Foreground="#7D7593">
+                                <Run Text="Entwickelt von" />
+                                <Run Foreground="#A39CB8" Text="Kev" />
+                            </TextBlock>
+                        </DockPanel>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

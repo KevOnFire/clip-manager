@@ -75,22 +75,90 @@ public partial class App : Application
         Log.FilePath = Path.Combine(localDir, "log.txt");
         Log.Info($"Start, Version {AppUpdater.CurrentVersionText}, Ordner {AppDirectory} (BaseDirectory {AppContext.BaseDirectory})");
 
-        var dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClipManager");
-        SettingsStore = new SettingsStore(Path.Combine(dataDir, "settings.json"));
-        Settings = SettingsStore.Load();
-        Db = new LibraryDb(Path.Combine(dataDir, "library.db"));
+        // Startbildschirm zuerst zeigen, dann im Hintergrund laden.
+        SplashWindow? splash = null;
+        try
+        {
+            splash = new SplashWindow();
+            splash.Show();
+        }
+        catch (Exception ex)
+        {
+            // Ohne Startbildschirm geht es auch.
+            Log.Error("Startbildschirm konnte nicht angezeigt werden", ex);
+            splash = null;
+        }
 
-        Thumbnails = new ThumbnailCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
-        Filmstrips = new FilmstripCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
-        AudioTracks = new AudioTrackCache(Path.Combine(localDir, "audio"), ProcessRunner);
-        CleanupExportTemp();
+        _ = StartAsync(splash, localDir);
+    }
 
-        var ffmpeg = LocateFfmpeg();
-        Log.Info(ffmpeg == null ? "FFmpeg nicht gefunden" : $"FFmpeg: {ffmpeg.Ffmpeg}, ffprobe: {ffmpeg.Ffprobe ?? "fehlt"}");
+    /// <summary>Lädt alles Nötige, zeigt dabei die Schritte im Startbildschirm und öffnet dann das Hauptfenster.</summary>
+    private async Task StartAsync(SplashWindow? splash, string localDir)
+    {
+        var started = DateTime.UtcNow;
 
-        var window = new MainWindow();
-        MainWindow = window;
-        window.Show();
+        // Kurz warten, damit der Startbildschirm gezeichnet wird, bevor gearbeitet wird.
+        async Task Step(string text, double percent)
+        {
+            splash?.SetStep(text, percent);
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+        }
+
+        try
+        {
+            await Step("Einstellungen laden …", 12);
+            var dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClipManager");
+            SettingsStore = new SettingsStore(Path.Combine(dataDir, "settings.json"));
+            Settings = SettingsStore.Load();
+            Db = new LibraryDb(Path.Combine(dataDir, "library.db"));
+
+            await Step("Zwischenspeicher vorbereiten …", 25);
+            Thumbnails = new ThumbnailCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
+            Filmstrips = new FilmstripCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
+            AudioTracks = new AudioTrackCache(Path.Combine(localDir, "audio"), ProcessRunner);
+            await Task.Run(CleanupExportTemp);
+
+            await Step("FFmpeg suchen …", 40);
+            var ffmpeg = LocateFfmpeg();
+            Log.Info(ffmpeg == null ? "FFmpeg nicht gefunden" : $"FFmpeg: {ffmpeg.Ffmpeg}, ffprobe: {ffmpeg.Ffprobe ?? "fehlt"}");
+
+            // Grafikkarten-Test läuft im Hintergrund weiter; höchstens kurz darauf warten.
+            await Step("Grafikkarte prüfen …", 55);
+            await Task.WhenAny(GetFfmpegStatusAsync(), Task.Delay(1500));
+
+            await Step("Clips einlesen …", 75);
+            var window = new MainWindow();
+            await Task.WhenAny(window.FirstLoad, Task.Delay(5000));
+
+            await Step("Fertig", 100);
+
+            // Mindestens so lange zeigen, bis die Einblend-Animation durch ist.
+            var shown = DateTime.UtcNow - started;
+            var rest = SplashWindow.IntroDuration + TimeSpan.FromSeconds(0.4) - shown;
+            if (splash != null && rest > TimeSpan.Zero)
+            {
+                await Task.Delay(rest);
+            }
+
+            MainWindow = window;
+            window.Show();
+            window.Activate();
+            if (splash != null)
+            {
+                await splash.FadeOutAsync();
+                splash.Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Fehler beim Start", ex);
+            MessageBox.Show(
+                $"Clippy konnte nicht starten:\n\n{ex.Message}",
+                "Clippy",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown();
+        }
     }
 
     /// <summary>Alte Zwischen-Exporte wegräumen (älter als 2 Tage, z.B. nur in Discord gezogen).</summary>
