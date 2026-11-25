@@ -56,9 +56,9 @@ public partial class MainWindow : FluentWindow
             DiskPanel.Children.Clear();
             foreach (var usage in usages)
             {
-                var warn = App.Settings.ShouldWarn(usage);
-                DiskPanel.Children.Add(DiskItem(usage, warn));
-                if (!warn)
+                var full = App.Settings.ShouldWarn(usage);
+                DiskPanel.Children.Add(DiskItem(usage, full));
+                if (!full)
                 {
                     _diskWarned.Remove(usage.Drive);
                 }
