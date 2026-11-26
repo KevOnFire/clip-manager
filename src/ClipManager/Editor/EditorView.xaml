@@ -170,22 +170,40 @@
         </DockPanel>
 
         <!-- Zeitleiste, darunter eine Zeile pro Tonspur (links die Spur-Köpfe) -->
+        <!-- Spuren lassen sich einklappen: dann bleibt nur der Filmstreifen, rechts kleine An/Aus-Knöpfe pro Spur -->
         <Grid x:Name="TracksArea" Grid.Row="3" Margin="16,0,16,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="250" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                <TextBlock
-                    x:Name="TracksHint"
-                    Height="92"
-                    Padding="0,6,0,0"
-                    FontSize="12"
-                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                    Text="Tonspuren werden geladen …"
-                    TextWrapping="Wrap" />
-                <ItemsControl x:Name="TrackHeaders">
+            <StackPanel
+                x:Name="TrackHeaderPanel"
+                Grid.Column="0"
+                Width="258"
+                ClipToBounds="True">
+                <DockPanel Width="250" Height="92" HorizontalAlignment="Left">
+                    <ui:Button
+                        Margin="0,0,0,6"
+                        Padding="8,3"
+                        Click="CollapseTracks_Click"
+                        Content="Spuren einklappen"
+                        DockPanel.Dock="Bottom"
+                        FontSize="12"
+                        Focusable="False"
+                        Icon="{ui:SymbolIcon ChevronDoubleRight20}"
+                        ToolTip="Tonspuren einklappen, damit das Video mehr Platz hat" />
+                    <TextBlock
+                        x:Name="TracksHint"
+                        Padding="0,6,0,0"
+                        FontSize="12"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        Text="Tonspuren werden geladen …"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                </DockPanel>
+                <ItemsControl x:Name="TrackHeaders" Width="250" HorizontalAlignment="Left">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type editor:TrackRowViewModel}">
                             <Border
@@ -245,12 +263,75 @@
             </StackPanel>
 
             <Border
+                x:Name="TimelineHost"
                 Grid.Column="1"
                 VerticalAlignment="Top"
                 CornerRadius="6"
                 ClipToBounds="True">
-                <editor:TimelineControl x:Name="TimelineView" />
+                <editor:TimelineControl x:Name="TimelineView" VerticalAlignment="Top" />
             </Border>
+
+            <!-- Eingeklappt: rechts pro Spur ein kleiner An/Aus-Knopf -->
+            <Grid
+                x:Name="CompactTracks"
+                Grid.Column="2"
+                Width="0"
+                Height="88"
+                VerticalAlignment="Top"
+                ClipToBounds="True"
+                Opacity="0">
+                <Grid.RenderTransform>
+                    <TranslateTransform x:Name="CompactTracksShift" X="40" />
+                </Grid.RenderTransform>
+                <DockPanel Width="262" Margin="8,0,0,0" HorizontalAlignment="Left">
+                    <ui:Button
+                        Width="30"
+                        Margin="0,0,6,0"
+                        Padding="0"
+                        VerticalAlignment="Stretch"
+                        Click="ExpandTracks_Click"
+                        DockPanel.Dock="Left"
+                        Focusable="False"
+                        Icon="{ui:SymbolIcon ChevronDoubleLeft20}"
+                        ToolTip="Tonspuren wieder ausklappen" />
+                    <ItemsControl x:Name="CompactTrackList" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type editor:TrackRowViewModel}">
+                                <ToggleButton
+                                    Width="108"
+                                    Height="26"
+                                    Margin="0,0,4,4"
+                                    Padding="6,0"
+                                    HorizontalContentAlignment="Left"
+                                    Focusable="False"
+                                    IsChecked="{Binding Enabled}"
+                                    ToolTip="{Binding Name}">
+                                    <DockPanel>
+                                        <Border
+                                            Width="4"
+                                            Height="14"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            Background="{Binding ColorBrush}"
+                                            CornerRadius="2"
+                                            DockPanel.Dock="Left" />
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="12"
+                                            Text="{Binding Name}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </DockPanel>
+                                </ToggleButton>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Grid>
         </Grid>
 
         <!-- Werkzeuge -->

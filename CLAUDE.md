@@ -65,7 +65,8 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
                           Auswahlrahmen liegt genau auf dem Kachelrand, Inhalt per `Views/RoundClip` rund abgeschnitten.
                           Neue Clips (gespeichert nach `NewClipsSince`, noch nie im Editor geöffnet, Tabelle `seen`): „NEU“ + kurzes Aufleuchten
   Editor/EditorView       Editor als Seite im Hauptfenster: Player, Vollbild, Tastenkürzel (kommen über MainWindow.PreviewKeyDown),
-                          speichert Schnitte automatisch in der DB. Oben „Löschen“ (Datei freigeben → Papierkorb → Bibliothek),
+                          speichert Schnitte automatisch in der DB. Oben „Löschen“ (Datei freigeben → Papierkorb → nächster Clip, sonst vorheriger, sonst Bibliothek),
+                          Spuren einklappbar (`TracksCollapsed` in settings.json): nur Filmstreifen + rechts An/Aus-Knöpfe pro Spur, mit Animation,
                           unten „Speichern unter …“ und „Original überschreiben“ (Schnellspeichern) mit Text statt nur Icons
   Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf, Spur-Zeilen).
                           Bedienung: in Spur ziehen = Auswahl → Menü (stumm / Lautstärke ändern / rausschneiden), Ränder von stummen und
@@ -76,6 +77,7 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
                           (TrackNames, TrackColors; Standardfarben in AppSettings.Palette)
   Views/SettingsView      Links Bereiche (Allgemein, Export, Tonspuren, Design, Programm), rechts nur der gewählte Bereich; Logo im Hintergrund wie in der Bibliothek.
                           Inhalt: Ordner (+ Unterordner an/aus), Player-Farben, Discord, Export-Ordner, Tonspuren (Name, Farbe, standardmäßig an, +/–), Design, Updates, FFmpeg/GPU, Credits ganz unten ("Credits to Yippie for the Logo and the Name", Wortlaut von Kev)
+  SingleInstance          Clippy läuft nur einmal: zweiter Start holt das offene Fenster nach vorne (Mutex + EventWaitHandle) und beendet sich
   AppUpdater, ShellFiles, Dialogs, FolderPicker
 tests/ClipManager.Core.Tests/   xUnit-Tests für Core
 .github/workflows/build.yml     Windows-Build, Tests, FFmpeg dazu, Artifact, Release auf main

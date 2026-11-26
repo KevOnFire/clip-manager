@@ -108,6 +108,9 @@ public sealed class AppSettings
     /// <summary>Eigenes Design mit Farbverlauf (standardmäßig aus).</summary>
     public ThemeSettings Theme { get; set; } = new();
 
+    /// <summary>Tonspuren im Editor eingeklappt (nur Filmstreifen + kleine An/Aus-Knöpfe). Gilt für alle Clips.</summary>
+    public bool TracksCollapsed { get; set; }
+
     /// <summary>Warnen, wenn die Festplatte mit den Clips fast voll ist.</summary>
     public bool DiskWarningEnabled { get; set; } = true;
 

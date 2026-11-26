@@ -72,6 +72,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         }
 
         Player.Source = new Uri(clip.Path);
+        SetTracksCollapsed(App.Settings.TracksCollapsed, animate: false);
         Loaded += (_, _) =>
         {
             WatchMonitor(true);
@@ -89,6 +90,83 @@ public partial class EditorView : System.Windows.Controls.UserControl
     }
 
     private bool _started;
+
+    // ---------- Spuren ein-/ausklappen ----------
+
+    private bool _tracksCollapsed;
+
+    private void CollapseTracks_Click(object sender, RoutedEventArgs e) => ToggleTracks(true);
+
+    private void ExpandTracks_Click(object sender, RoutedEventArgs e) => ToggleTracks(false);
+
+    private void ToggleTracks(bool collapsed)
+    {
+        SetTracksCollapsed(collapsed, animate: true);
+        App.Settings.TracksCollapsed = collapsed;
+        try
+        {
+            App.SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Einstellungen konnten nicht gespeichert werden", ex);
+        }
+    }
+
+    /// <summary>
+    /// Eingeklappt: Spur-Köpfe links schieben sich weg, die Spur-Zeilen der Zeitleiste verschwinden
+    /// (nur der Filmstreifen bleibt), rechts gleiten kleine An/Aus-Knöpfe pro Spur rein.
+    /// </summary>
+    private void SetTracksCollapsed(bool collapsed, bool animate)
+    {
+        _tracksCollapsed = collapsed;
+        var seconds = animate && SystemParameters.ClientAreaAnimation ? 0.28 : 0;
+        var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut };
+
+        void Animate(System.Windows.Media.Animation.IAnimatable target, DependencyProperty property, double to, double? from = null, Action? done = null)
+        {
+            var animation = new System.Windows.Media.Animation.DoubleAnimation(to, TimeSpan.FromSeconds(seconds)) { EasingFunction = ease };
+            if (from is { } f)
+            {
+                animation.From = f;
+            }
+
+            if (done != null)
+            {
+                animation.Completed += (_, _) => done();
+            }
+
+            target.BeginAnimation(property, animation);
+        }
+
+        Animate(TrackHeaderPanel, WidthProperty, collapsed ? 0 : 258);
+        Animate(TrackHeaderPanel, OpacityProperty, collapsed ? 0 : 1);
+        Animate(CompactTracks, WidthProperty, collapsed ? 270 : 0);
+        Animate(CompactTracks, OpacityProperty, collapsed ? 1 : 0);
+        Animate(CompactTracksShift, System.Windows.Media.TranslateTransform.XProperty, collapsed ? 0 : 40);
+        CompactTracks.IsHitTestVisible = collapsed;
+
+        // Höhe der Zeitleiste: eingeklappt nur Filmstreifen + Zeitachse.
+        var stripOnly = TimelineControl.LanesTop - 4;
+        var current = TimelineHost.ActualHeight > 0 ? TimelineHost.ActualHeight : (collapsed ? TimelineView.Height : stripOnly);
+        if (collapsed)
+        {
+            Animate(TimelineHost, MaxHeightProperty, stripOnly, current);
+        }
+        else
+        {
+            var full = double.IsNaN(TimelineView.Height) ? current : TimelineView.Height;
+            Animate(TimelineHost, MaxHeightProperty, full, current, () =>
+            {
+                if (!_tracksCollapsed)
+                {
+                    // Animation lösen, damit später nachgeladene Spuren wieder Platz bekommen.
+                    TimelineHost.BeginAnimation(MaxHeightProperty, null);
+                    TimelineHost.MaxHeight = double.PositiveInfinity;
+                }
+            });
+        }
+    }
 
     // ---------- Bildschirmwechsel ----------
     // Der Windows-Player kommt nicht damit klar, wenn das Fenster auf einen anderen Bildschirm
@@ -356,6 +434,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
             .Select(i => new TrackRowViewModel(_timeline, i, App.Settings.TrackName(i, _info?.AudioTracks.ElementAtOrDefault(i)?.Title, count), TrackColorOf(i)))
             .ToList();
         TrackHeaders.ItemsSource = _trackRows;
+        CompactTrackList.ItemsSource = _trackRows;
         TimelineView.TrackColors = Enumerable.Range(0, count).Select(i => TrackColorOf(i)).ToList();
         TracksHint.Text = count switch
         {
@@ -1140,10 +1219,23 @@ public partial class EditorView : System.Windows.Controls.UserControl
         {
             Log.Error($"\"{_clip.Path}\" konnte nicht gelöscht werden", ex);
             await Dialogs.ErrorAsync(ex.Message);
+            Close();
+            return;
         }
 
-        Close();
+        // Das Hauptfenster öffnet den nächsten Clip (oder die Bibliothek, wenn es keinen mehr gibt).
+        if (ClipDeleted != null)
+        {
+            ClipDeleted.Invoke(this, _clip.Path);
+        }
+        else
+        {
+            Close();
+        }
     }
+
+    /// <summary>Der Clip wurde im Editor gelöscht (Pfad der gelöschten Datei).</summary>
+    public event EventHandler<string>? ClipDeleted;
 
     private void Save_Click(object sender, RoutedEventArgs e) => OpenExport(saveMode: true);
 

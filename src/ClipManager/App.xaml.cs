@@ -73,6 +73,15 @@ public partial class App : Application
 
         var localDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ClipManager");
         Log.FilePath = Path.Combine(localDir, "log.txt");
+
+        // Läuft Clippy schon? Dann das offene Fenster nach vorne holen statt ein zweites zu öffnen.
+        if (!SingleInstance.TryStart(() => SingleInstance.BringToFront(MainWindow is ClipManager.MainWindow main ? main : null)))
+        {
+            Log.Info("Clippy läuft schon, das offene Fenster wird nach vorne geholt");
+            Shutdown();
+            return;
+        }
+
         Log.Info($"Start, Version {AppUpdater.CurrentVersionText}, Ordner {AppDirectory} (BaseDirectory {AppContext.BaseDirectory})");
 
         // Startbildschirm zuerst zeigen, dann im Hintergrund laden.
