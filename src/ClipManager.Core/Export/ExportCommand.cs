@@ -4,6 +4,16 @@ using ClipManager.Core.Editing;
 
 namespace ClipManager.Core.Export;
 
+/// <summary>
+/// Ein Objekt zum Einbrennen als fertig gezeichnetes PNG (macht die Oberfläche, genau wie in der Vorschau).
+/// Liegt bei <paramref name="Area"/> im Bild (Originalauflösung), sichtbar von Start bis End (Sekunden im Original).
+/// Unschärfe: Das PNG ist eine Maske (weiß = verwischen, schwarz = nicht) und BlurRadius &gt; 0.
+/// </summary>
+public sealed record OverlayLayer(string ImagePath, PixelRect Area, double Start, double End, int BlurRadius = 0)
+{
+    public bool IsBlur => BlurRadius > 0;
+}
+
 /// <summary>Baut die FFmpeg-Befehlszeile für einen Export.</summary>
 public static class ExportCommand
 {
@@ -19,7 +29,8 @@ public static class ExportCommand
         ExportPlan plan,
         VideoEncoder encoder,
         int sourceHeight,
-        double sourceFps)
+        double sourceFps,
+        IReadOnlyList<OverlayLayer>? overlays = null)
     {
         if (ranges.Count == 0)
         {
@@ -29,13 +40,27 @@ public static class ExportCommand
         // Schnelles Springen zum ersten Bereich; danach zählen die Zeiten ab diesem Punkt.
         var offset = ranges[0].Start;
         var end = ranges[^1].End;
+        var layers = VisibleLayers(overlays, offset, end);
         var args = new List<string>
         {
             "-hide_banner", "-nostdin", "-loglevel", "error", "-nostats", "-progress", "pipe:1",
             "-ss", F(offset.TotalSeconds), "-t", F((end - offset).TotalSeconds), "-i", input,
-            "-filter_complex", BuildFilter(ranges, offset, audioTracks, plan, sourceHeight, sourceFps),
-            "-map", "[v]",
         };
+
+        // Jedes Objekt-Bild als eigene Quelle, wiederholt über die ganze Länge.
+        foreach (var layer in layers)
+        {
+            args.AddRange(new[]
+            {
+                "-framerate", F(sourceFps > 1 ? sourceFps : 60), "-loop", "1", "-t", F((end - offset).TotalSeconds + 1), "-i", layer.ImagePath,
+            });
+        }
+
+        args.AddRange(new[]
+        {
+            "-filter_complex", BuildFilter(ranges, offset, audioTracks, plan, sourceHeight, sourceFps, layers),
+            "-map", "[v]",
+        });
 
         if (audioTracks.Count > 0)
         {
@@ -79,16 +104,36 @@ public static class ExportCommand
         IReadOnlyList<TrackEdit> audioTracks,
         ExportPlan plan,
         int sourceHeight,
-        double sourceFps)
+        double sourceFps,
+        IReadOnlyList<OverlayLayer>? overlays = null)
     {
         var sb = new StringBuilder();
         var n = ranges.Count;
+
+        // Objekte zuerst ins ganze Video (Zeiten ab dem Sprungpunkt), danach schneiden.
+        var videoSource = "[0:v]";
+        var layers = overlays ?? Array.Empty<OverlayLayer>();
+        if (layers.Count > 0)
+        {
+            videoSource = AppendOverlays(sb, layers, offset);
+            if (n > 1)
+            {
+                sb.Append($"{videoSource}split={n}");
+                for (var i = 0; i < n; i++)
+                {
+                    sb.Append($"[vs{i}]");
+                }
+
+                sb.Append(';');
+            }
+        }
 
         // Video: Bereiche ausschneiden und aneinanderhängen
         for (var i = 0; i < n; i++)
         {
             var (s, e) = (ranges[i].Start - offset, ranges[i].End - offset);
-            sb.Append($"[0:v]trim=start={F(s.TotalSeconds)}:end={F(e.TotalSeconds)},setpts=PTS-STARTPTS[v{i}];");
+            var from = layers.Count > 0 && n > 1 ? $"[vs{i}]" : videoSource;
+            sb.Append($"{from}trim=start={F(s.TotalSeconds)}:end={F(e.TotalSeconds)},setpts=PTS-STARTPTS[v{i}];");
         }
 
         var videoOut = "vc";
@@ -181,6 +226,47 @@ public static class ExportCommand
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>Nur Objekte, die im exportierten Bereich überhaupt vorkommen.</summary>
+    public static IReadOnlyList<OverlayLayer> VisibleLayers(IReadOnlyList<OverlayLayer>? overlays, TimeSpan offset, TimeSpan end) =>
+        (overlays ?? Array.Empty<OverlayLayer>())
+            .Where(o => o.End > offset.TotalSeconds && o.Start < end.TotalSeconds && o.Area.Width >= 2 && o.Area.Height >= 2)
+            .ToList();
+
+    /// <summary>
+    /// Legt die Objekte der Reihe nach (hinten zuerst) übers Video. Eingang k+1 ist das Bild von Objekt k.
+    /// Unschärfe: Bereich ausschneiden, verwischen, mit der Maske (gedrehte Form) zurücklegen.
+    /// Gibt das Etikett des Ergebnisses zurück.
+    /// </summary>
+    private static string AppendOverlays(StringBuilder sb, IReadOnlyList<OverlayLayer> layers, TimeSpan offset)
+    {
+        var current = "[0:v]";
+        for (var k = 0; k < layers.Count; k++)
+        {
+            var layer = layers[k];
+            var a = layer.Area;
+            var start = Math.Max(0, layer.Start - offset.TotalSeconds);
+            var end = layer.End - offset.TotalSeconds;
+            var enable = $"enable='between(t,{F(start)},{F(end)})'";
+            var input = $"[{k + 1}:v]";
+            if (layer.IsBlur)
+            {
+                sb.Append($"{current}split[o{k}a][o{k}b];");
+                sb.Append($"[o{k}b]crop={a.Width}:{a.Height}:{a.X}:{a.Y},boxblur=luma_radius={layer.BlurRadius}:luma_power=2:{enable}[o{k}c];");
+                sb.Append($"{input}format=gray[o{k}m];");
+                sb.Append($"[o{k}c][o{k}m]alphamerge[o{k}d];");
+                sb.Append($"[o{k}a][o{k}d]overlay={a.X}:{a.Y}:{enable}[ol{k}];");
+            }
+            else
+            {
+                sb.Append($"{current}{input}overlay={a.X}:{a.Y}:{enable}[ol{k}];");
+            }
+
+            current = $"[ol{k}]";
+        }
+
+        return current;
     }
 
     /// <summary>

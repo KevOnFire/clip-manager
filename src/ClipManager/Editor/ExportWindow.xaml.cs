@@ -199,6 +199,28 @@ public partial class ExportWindow : FluentWindow
             ProgressText.Text = p.Text;
         });
 
+        // Objekte (Boxen, Text, Unschärfe …) in Originalgröße als Bilder zeichnen, FFmpeg legt sie drüber.
+        IReadOnlyList<OverlayLayer>? layers = null;
+        string? layerFolder = null;
+        if (_timeline.Overlays.Count > 0)
+        {
+            try
+            {
+                var width = _info is { Width: > 0 } ? _info.Width : 1920;
+                var height = _info is { Height: > 0 } ? _info.Height : 1080;
+                layerFolder = Path.Combine(App.ExportTempFolder, "objekte-" + Guid.NewGuid().ToString("N")[..8]);
+                layers = OverlayVisuals.RenderLayers(_timeline.Overlays, width, height, layerFolder);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Objekte konnten nicht für den Export gezeichnet werden", ex);
+                await Dialogs.ErrorAsync($"Die Objekte im Video konnten nicht vorbereitet werden: {ex.Message}");
+                SetupPanel.Visibility = Visibility.Visible;
+                ProgressPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+        }
+
         var request = new ExportRequest(
             ffmpeg.Ffmpeg,
             _clip.Path,
@@ -208,7 +230,8 @@ public partial class ExportWindow : FluentWindow
             _info?.Height ?? 1080,
             _info?.Fps ?? 60,
             _encoder,
-            limit);
+            limit,
+            layers);
 
         ExportResult result;
         try
@@ -225,6 +248,7 @@ public partial class ExportWindow : FluentWindow
         }
         catch (OperationCanceledException)
         {
+            DeleteLayerFolder(layerFolder);
             _cts = null;
             ProgressPanel.Visibility = Visibility.Collapsed;
             SetupPanel.Visibility = Visibility.Visible;
@@ -237,6 +261,7 @@ public partial class ExportWindow : FluentWindow
         }
 
         _cts = null;
+        DeleteLayerFolder(layerFolder);
         ProgressPanel.Visibility = Visibility.Collapsed;
         if (result.OutputPath == null)
         {
@@ -513,4 +538,21 @@ public partial class ExportWindow : FluentWindow
     }
 
     private sealed record TargetItem(DiscordTier? Tier, string Label);
+
+    private static void DeleteLayerFolder(string? folder)
+    {
+        if (folder == null)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Bleibt liegen, der Export-Ordner wird ohnehin regelmäßig aufgeräumt.
+        }
+    }
 }

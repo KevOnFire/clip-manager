@@ -28,6 +28,9 @@ public sealed class ClipEditState
 
     /// <summary>Tonspuren. Null bei alten Einträgen oder wenn nie etwas an den Spuren geändert wurde.</summary>
     public List<TrackEditState>? Tracks { get; set; }
+
+    /// <summary>Objekte im Video (Boxen, Text, Unschärfe …). Null, wenn keine.</summary>
+    public List<OverlayItem>? Overlays { get; set; }
 }
 
 /// <summary>
@@ -45,6 +48,7 @@ public sealed class EditTimeline
     private readonly Stack<ClipEditState> _undo = new();
     private List<TrackEdit> _tracks = new();
     private List<TrackEdit> _defaultTracks = new();
+    private List<OverlayItem> _overlays = new();
 
     public EditTimeline(TimeSpan duration)
     {
@@ -68,7 +72,121 @@ public sealed class EditTimeline
     public bool CanUndo => _undo.Count > 0;
 
     /// <summary>True, wenn überhaupt etwas geändert wurde.</summary>
-    public bool IsEdited => In > TimeSpan.Zero || Out < Duration || _removed.Count > 0 || TracksEdited;
+    public bool IsEdited => In > TimeSpan.Zero || Out < Duration || _removed.Count > 0 || TracksEdited || _overlays.Count > 0;
+
+    /// <summary>Objekte im Video, hinten zuerst (aufsteigendes Z).</summary>
+    public IReadOnlyList<OverlayItem> Overlays => _overlays;
+
+    /// <summary>Objekte, die bei t zu sehen sind, hinten zuerst.</summary>
+    public IEnumerable<OverlayItem> OverlaysAt(TimeSpan t) => _overlays.Where(o => o.IsVisibleAt(t));
+
+    public OverlayItem? FindOverlay(string id) => _overlays.FirstOrDefault(o => o.Id == id);
+
+    /// <summary>Fügt ein Objekt ganz vorne ein (Werte werden begrenzt). Gibt das gespeicherte Objekt zurück.</summary>
+    public OverlayItem AddOverlay(OverlayItem item)
+    {
+        var copy = item.Clone();
+        copy.Normalize(Duration.TotalSeconds);
+        if (_overlays.Any(o => o.Id == copy.Id))
+        {
+            copy.Id = Guid.NewGuid().ToString("N");
+        }
+
+        Mutate(() =>
+        {
+            _overlays.Add(copy);
+            Renumber();
+        });
+        return copy;
+    }
+
+    public bool RemoveOverlay(string id)
+    {
+        var index = _overlays.FindIndex(o => o.Id == id);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        Mutate(() =>
+        {
+            _overlays.RemoveAt(index);
+            Renumber();
+        });
+        return true;
+    }
+
+    /// <summary>
+    /// Ändert ein Objekt. recordUndo=false für Zwischenschritte beim Ziehen (vorher BeginChange).
+    /// </summary>
+    public bool UpdateOverlay(string id, Action<OverlayItem> change, bool recordUndo = true)
+    {
+        var index = _overlays.FindIndex(o => o.Id == id);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        void Do()
+        {
+            var copy = _overlays[index].Clone();
+            change(copy);
+            copy.Id = id;
+            copy.Normalize(Duration.TotalSeconds);
+            _overlays[index] = copy;
+        }
+
+        Apply(Do, recordUndo);
+        return true;
+    }
+
+    /// <summary>Eine Ebene nach vorne (dir = +1) oder nach hinten (dir = −1).</summary>
+    public bool MoveOverlayLayer(string id, int dir)
+    {
+        var index = _overlays.FindIndex(o => o.Id == id);
+        var target = index + Math.Sign(dir);
+        if (index < 0 || dir == 0 || target < 0 || target >= _overlays.Count)
+        {
+            return false;
+        }
+
+        Mutate(() =>
+        {
+            (_overlays[index], _overlays[target]) = (_overlays[target], _overlays[index]);
+            Renumber();
+        });
+        return true;
+    }
+
+    /// <summary>Setzt die Reihenfolge, vorne zuerst (wie in der Ebenen-Liste). Unbekannte Ids werden ignoriert.</summary>
+    public bool SetOverlayOrder(IReadOnlyList<string> frontToBack, bool recordUndo = true)
+    {
+        var ordered = frontToBack.Reverse()
+            .Select(id => _overlays.FirstOrDefault(o => o.Id == id))
+            .OfType<OverlayItem>()
+            .Distinct()
+            .ToList();
+        ordered.InsertRange(0, _overlays.Where(o => !ordered.Contains(o)));
+        if (ordered.SequenceEqual(_overlays))
+        {
+            return false;
+        }
+
+        Apply(() =>
+        {
+            _overlays = ordered;
+            Renumber();
+        }, recordUndo);
+        return true;
+    }
+
+    private void Renumber()
+    {
+        for (var i = 0; i < _overlays.Count; i++)
+        {
+            _overlays[i].Z = i;
+        }
+    }
 
     /// <summary>Alle Tonspuren mit ihrer Bearbeitung.</summary>
     public IReadOnlyList<TrackEdit> Tracks => _tracks;
@@ -557,9 +675,26 @@ public sealed class EditTimeline
         return true;
     }
 
+    /// <summary>Nur den Bereich a–b behalten: Anfang und Ende in einem Schritt setzen.</summary>
+    public bool KeepOnly(TimeSpan a, TimeSpan b)
+    {
+        var range = Ordered(a, b);
+        if (range.Duration < MinSegment || (range.Start == In && range.End == Out))
+        {
+            return false;
+        }
+
+        Mutate(() =>
+        {
+            In = range.Start;
+            Out = range.End;
+        });
+        return true;
+    }
+
     public void Reset()
     {
-        if (!IsEdited && _splits.Count == 0 && !TracksEdited)
+        if (!IsEdited && _splits.Count == 0 && !TracksEdited && _overlays.Count == 0)
         {
             return;
         }
@@ -571,6 +706,7 @@ public sealed class EditTimeline
             _splits.Clear();
             _removed.Clear();
             _tracks = _defaultTracks.ToList();
+            _overlays = new List<OverlayItem>();
         });
     }
 
@@ -672,6 +808,7 @@ public sealed class EditTimeline
                 Ducked = t.Ducked.Select(d => new[] { d.Range.Start.TotalSeconds, d.Range.End.TotalSeconds, d.Db, d.FadeIn, d.FadeOut }).ToList(),
             }).ToList()
             : null,
+        Overlays = _overlays.Count > 0 ? _overlays.Select(o => o.Clone()).ToList() : null,
     };
 
     private void Restore(ClipEditState state)
@@ -691,6 +828,20 @@ public sealed class EditTimeline
         {
             _removed.Add(r);
         }
+
+        _overlays = (state.Overlays ?? new List<OverlayItem>())
+            .Where(o => o != null)
+            .OrderBy(o => o.Z)
+            .Select(o =>
+            {
+                var copy = o.Clone();
+                copy.Normalize(Duration.TotalSeconds);
+                return copy;
+            })
+            .GroupBy(o => o.Id)
+            .Select(g => g.First())
+            .ToList();
+        Renumber();
 
         _tracks = _defaultTracks.ToList();
         foreach (var saved in state.Tracks ?? new List<TrackEditState>())

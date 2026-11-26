@@ -14,7 +14,8 @@ public sealed record ExportRequest(
     int SourceHeight,
     double SourceFps,
     VideoEncoder Encoder,
-    double? LimitMb);
+    double? LimitMb,
+    IReadOnlyList<OverlayLayer>? Overlays = null);
 
 public sealed record ExportResult(bool Success, string? OutputPath, long Bytes, ExportPlan? Plan, string? Error, int Attempts);
 
@@ -63,7 +64,7 @@ public sealed class Exporter
         {
             var label = attempt == 1 ? "Exportiere" : $"Noch zu groß, Versuch {attempt}";
             var args = ExportCommand.Build(
-                request.Input, partial, request.Ranges, request.AudioTracks, plan, request.Encoder, request.SourceHeight, request.SourceFps);
+                request.Input, partial, request.Ranges, request.AudioTracks, plan, request.Encoder, request.SourceHeight, request.SourceFps, request.Overlays);
             Log.Info($"Export Versuch {attempt}: {plan.Describe()}, Encoder {request.Encoder}");
 
             var (exitCode, stderr) = await RunFfmpegAsync(request.FfmpegPath, args, outputDuration, label, progress, ct).ConfigureAwait(false);
