@@ -1194,7 +1194,7 @@ public sealed class TimelineControl : FrameworkElement
             o.Start = start;
             o.End = end;
         }, recordUndo: false);
-        SeekRequested?.Invoke(this, TimeSpan.FromSeconds(_drag == DragMode.OverlayEnd ? end : start));
+        // Kein Springen: der Abspielkopf bleibt stehen, während der Balken verschoben wird.
     }
 
     private Rect OverlayBarRect(OverlayItem item)

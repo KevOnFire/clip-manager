@@ -70,14 +70,8 @@ public partial class EditorView
     {
         VideoFrame.SizeChanged += (_, _) => SyncOverlays(rebuild: true);
         TimelineView.StripRangeSelected += (_, e) => ShowStripMenu(e.Start, e.End);
-        TimelineView.OverlayPressed += (_, id) =>
-        {
-            SelectOverlay(id);
-            if (id != null && _timeline?.FindOverlay(id) is { } item && !item.IsVisibleAt(Position))
-            {
-                Seek(item.Range.Start);
-            }
-        };
+        // Balken anklicken/ziehen wählt nur aus, die Stelle im Video bleibt wo sie ist (Wunsch Kev).
+        TimelineView.OverlayPressed += (_, id) => SelectOverlay(id);
         TimelineView.OverlayHovered += (_, id) => SetHoverOverlay(id, fromTimeline: true);
         SetShowObjects(App.Settings.ShowObjectLanes, persist: false);
     }
