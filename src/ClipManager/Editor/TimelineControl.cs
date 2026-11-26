@@ -22,6 +22,9 @@ public sealed class TimelineControl : FrameworkElement
     public const double LanesTop = 6 + 64 + 18 + 4;
     public const double LaneHeight = 34;
 
+    /// <summary>Höhe einer Objekt-Reihe (Boxen, Text … als Balken).</summary>
+    public const double ObjectLaneHeight = 26;
+
     private static readonly Brush LaneBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2E)));
     private static readonly Brush WaveBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x5A, 0xB0, 0xFF)));
     private static readonly Brush WaveOffBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x5A)));
@@ -79,6 +82,20 @@ public sealed class TimelineControl : FrameworkElement
     private IReadOnlyList<float[]?>? _peaks;
     private readonly Dictionary<int, (double Width, Geometry Geometry)> _waveCache = new();
 
+    // Objekt-Reihen
+    private bool _showObjects;
+    private string? _selectedOverlay;
+    private string? _hoverOverlay;
+    private Dictionary<string, int> _overlayLanes = new();
+    private int _overlayLaneCount;
+    private string? _dragOverlay;
+    private double _dragOverlayStart;
+    private double _dragOverlayEnd;
+    private TimeSpan _dragDownTime;
+
+    /// <summary>Auswahl per Rechtsklick-Ziehen auf dem Filmstreifen (statt in einer Spur).</summary>
+    private const int StripSelection = -2;
+
     public TimelineControl()
     {
         Height = LanesTop;
@@ -96,7 +113,69 @@ public sealed class TimelineControl : FrameworkElement
         SplitEdge,
         MutedEdge,
         DuckEdge,
+        StripSelect,
+        OverlayMove,
+        OverlayStart,
+        OverlayEnd,
     }
+
+    /// <summary>Mit Rechtsklick auf dem Filmstreifen ein Bereich aufgezogen (Anfang, Ende).</summary>
+    public event EventHandler<(TimeSpan Start, TimeSpan End)>? StripRangeSelected;
+
+    /// <summary>Balken eines Objekts angeklickt (Id), oder null für Klick auf eine leere Stelle der Objekt-Reihen.</summary>
+    public event EventHandler<string?>? OverlayPressed;
+
+    /// <summary>Maus über einem Objekt-Balken (Id) oder nicht mehr (null).</summary>
+    public event EventHandler<string?>? OverlayHovered;
+
+    /// <summary>Unter dem Filmstreifen die Objekt-Reihen statt der Tonspuren zeigen.</summary>
+    public bool ShowObjects
+    {
+        get => _showObjects;
+        set
+        {
+            if (_showObjects != value)
+            {
+                _showObjects = value;
+                UpdateHeight();
+                InvalidateVisual();
+            }
+        }
+    }
+
+    public string? SelectedOverlay
+    {
+        get => _selectedOverlay;
+        set
+        {
+            if (_selectedOverlay != value)
+            {
+                _selectedOverlay = value;
+                InvalidateVisual();
+            }
+        }
+    }
+
+    public string? HoverOverlay
+    {
+        get => _hoverOverlay;
+        set
+        {
+            if (_hoverOverlay != value)
+            {
+                _hoverOverlay = value;
+                InvalidateVisual();
+            }
+        }
+    }
+
+    /// <summary>Anzahl der Objekt-Reihen (immer eine leere mehr als nötig, mindestens 3).</summary>
+    public int ObjectLaneRows => Math.Max(3, _overlayLaneCount + 1);
+
+    /// <summary>Höhe des Bereichs unter dem Filmstreifen (Tonspuren oder Objekt-Reihen).</summary>
+    public double LanesHeight => _showObjects
+        ? ObjectLaneRows * ObjectLaneHeight
+        : TrackCount * LaneHeight;
 
     /// <summary>Der Nutzer hat auf der Zeitleiste geklickt oder gezogen.</summary>
     public event EventHandler<TimeSpan>? SeekRequested;
@@ -120,6 +199,7 @@ public sealed class TimelineControl : FrameworkElement
                 _timeline.Changed += OnTimelineChanged;
             }
 
+            UpdateOverlayLanes();
             UpdateHeight();
             InvalidateVisual();
         }
@@ -279,8 +359,26 @@ public sealed class TimelineControl : FrameworkElement
         DrawHandle(dc, inX, isIn: true);
         DrawHandle(dc, outX, isIn: false);
         DrawRuler(dc, tl.Duration, width);
-        DrawLanes(dc, tl, strip, inX, outX);
-        if (_selTrack >= 0 && _selTrack < tl.Tracks.Count)
+        if (_showObjects)
+        {
+            DrawObjectLanes(dc, tl, strip, inX, outX);
+        }
+        else
+        {
+            DrawLanes(dc, tl, strip, inX, outX);
+        }
+
+        if (_selTrack == StripSelection)
+        {
+            var a = X(Min(_selStart, _selEnd));
+            var b = X(Max(_selStart, _selEnd));
+            dc.DrawRectangle(SelectionBrush, SelectionPen, new Rect(a, StripTop, Math.Max(1, b - a), StripHeight));
+            if (_showObjects)
+            {
+                dc.DrawRectangle(SelectionBrush, null, new Rect(a, LanesTop, Math.Max(1, b - a), LanesHeight - 4));
+            }
+        }
+        else if (!_showObjects && _selTrack >= 0 && _selTrack < tl.Tracks.Count)
         {
             var a = X(Min(_selStart, _selEnd));
             var b = X(Max(_selStart, _selEnd));
@@ -292,9 +390,10 @@ public sealed class TimelineControl : FrameworkElement
 
         // Abspielkopf: nur innerhalb des Filmstreifens, nicht darüber
         var px = X(_position);
-        var playheadBottom = TrackCount > 0 ? LanesTop + TrackCount * LaneHeight - 4 : StripTop + StripHeight;
+        var lanesHeight = LanesHeight;
+        var playheadBottom = lanesHeight > 0 ? LanesTop + lanesHeight - 4 : StripTop + StripHeight;
         dc.DrawLine(PlayheadPen, new Point(px, StripTop), new Point(px, StripTop + StripHeight));
-        if (TrackCount > 0)
+        if (lanesHeight > 0)
         {
             dc.DrawLine(PlayheadPen, new Point(px, LanesTop), new Point(px, playheadBottom));
         }
@@ -329,6 +428,31 @@ public sealed class TimelineControl : FrameworkElement
         _downX = x;
         _moved = false;
         ClearSelection();
+
+        if (_showObjects && point.Y >= LanesTop)
+        {
+            if (OverlayBarAt(point) is { } bar)
+            {
+                OverlayPressed?.Invoke(this, bar.Id);
+                if (_timeline.FindOverlay(bar.Id) is { } item)
+                {
+                    _drag = bar.Edge < 0 ? DragMode.OverlayStart : bar.Edge > 0 ? DragMode.OverlayEnd : DragMode.OverlayMove;
+                    _dragOverlay = item.Id;
+                    _dragOverlayStart = item.Start;
+                    _dragOverlayEnd = item.End;
+                    _dragDownTime = TimeAt(x);
+                    _timeline.BeginChange();
+                    CaptureMouse();
+                    ScrubbingChanged?.Invoke(this, true);
+                    e.Handled = true;
+                    return;
+                }
+            }
+            else
+            {
+                OverlayPressed?.Invoke(this, null);
+            }
+        }
 
         var lane = LaneAt(point.Y);
         if (lane is { } track && MutedEdgeAt(track, x) is { } edge)
@@ -403,6 +527,16 @@ public sealed class TimelineControl : FrameworkElement
         if (_drag == DragMode.None)
         {
             Cursor = HoverCursor(point);
+            if (_showObjects)
+            {
+                var hover = point.Y >= LanesTop ? OverlayBarAt(point)?.Id : null;
+                if (hover != _hoverOverlay)
+                {
+                    HoverOverlay = hover;
+                    OverlayHovered?.Invoke(this, hover);
+                }
+            }
+
             return;
         }
 
@@ -419,8 +553,15 @@ public sealed class TimelineControl : FrameworkElement
                 return;
 
             case DragMode.LaneSelect:
+            case DragMode.StripSelect:
                 _selEnd = t;
                 InvalidateVisual();
+                return;
+
+            case DragMode.OverlayMove:
+            case DragMode.OverlayStart:
+            case DragMode.OverlayEnd:
+                MoveOverlayBar(t);
                 return;
 
             case DragMode.SplitEdge:
@@ -486,6 +627,46 @@ public sealed class TimelineControl : FrameworkElement
         e.Handled = true;
     }
 
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (_hoverOverlay != null && _drag == DragMode.None)
+        {
+            HoverOverlay = null;
+            OverlayHovered?.Invoke(this, null);
+        }
+    }
+
+    /// <summary>Rechtsklick gedrückt halten und ziehen (Filmstreifen oder Objekt-Reihen): Bereich markieren.</summary>
+    protected override void OnMouseRightButtonDown(MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonDown(e);
+        var point = e.GetPosition(this);
+        if (_timeline == null || _drag != DragMode.None || (point.Y >= LanesTop && !_showObjects))
+        {
+            return;
+        }
+
+        _downX = point.X;
+        _moved = false;
+        _drag = DragMode.StripSelect;
+        _selTrack = StripSelection;
+        _selStart = _selEnd = TimeAt(point.X);
+        CaptureMouse();
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    protected override void OnMouseRightButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonUp(e);
+        if (_drag == DragMode.StripSelect)
+        {
+            FinishDrag(e.GetPosition(this));
+            e.Handled = true;
+        }
+    }
+
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
@@ -496,7 +677,7 @@ public sealed class TimelineControl : FrameworkElement
     public void ClearSelection()
     {
         // Schließt sich das alte Menü erst, während schon neu gezogen wird, die neue Auswahl behalten.
-        if (_selTrack >= 0 && _drag != DragMode.LaneSelect)
+        if (_selTrack != -1 && _drag != DragMode.LaneSelect && _drag != DragMode.StripSelect)
         {
             _selTrack = -1;
             InvalidateVisual();
@@ -548,6 +729,29 @@ public sealed class TimelineControl : FrameworkElement
                 }
 
                 break;
+            case DragMode.StripSelect:
+                if (_moved && up != null && (_selEnd - _selStart).Duration() >= EditTimeline.MinSegment)
+                {
+                    InvalidateVisual();
+                    StripRangeSelected?.Invoke(this, (Min(_selStart, _selEnd), Max(_selStart, _selEnd)));
+                    return; // Auswahl bleibt sichtbar, bis das Menü zu ist.
+                }
+
+                ClearSelection();
+                return;
+
+            case DragMode.OverlayMove:
+            case DragMode.OverlayStart:
+            case DragMode.OverlayEnd:
+                if (!_moved)
+                {
+                    // Nur angeklickt: leeren Rückgängig-Schritt wieder weg.
+                    _timeline?.Undo();
+                }
+
+                _dragOverlay = null;
+                break;
+
             case DragMode.Playhead:
                 if (!_moved && up != null && _timeline?.SegmentAt(t) is { Removed: true })
                 {
@@ -607,6 +811,11 @@ public sealed class TimelineControl : FrameworkElement
 
     private Cursor HoverCursor(Point point)
     {
+        if (_showObjects && point.Y >= LanesTop)
+        {
+            return OverlayBarAt(point) is { } bar ? (bar.Edge != 0 ? Cursors.SizeWE : Cursors.SizeAll) : Cursors.Hand;
+        }
+
         var lane = LaneAt(point.Y);
         if ((lane is { } track && (MutedEdgeAt(track, point.X) != null || DuckEdgeAt(track, point.X) != null)) || RemovedEdgeAt(point.X) != null)
         {
@@ -831,13 +1040,15 @@ public sealed class TimelineControl : FrameworkElement
 
     private void OnTimelineChanged(object? sender, EventArgs e)
     {
+        UpdateOverlayLanes();
         UpdateHeight();
         InvalidateVisual();
     }
 
     private void UpdateHeight()
     {
-        var height = TrackCount > 0 ? LanesTop + TrackCount * LaneHeight : LanesTop;
+        var lanes = LanesHeight;
+        var height = lanes > 0 ? LanesTop + lanes : LanesTop;
         if (Math.Abs(Height - height) > 0.5)
         {
             Height = height;
@@ -846,7 +1057,7 @@ public sealed class TimelineControl : FrameworkElement
 
     private int? LaneAt(double y)
     {
-        if (TrackCount == 0 || y < LanesTop)
+        if (_showObjects || TrackCount == 0 || y < LanesTop)
         {
             return null;
         }
@@ -936,6 +1147,173 @@ public sealed class TimelineControl : FrameworkElement
                 var x = X(split);
                 dc.DrawLine(TickPen, new Point(x, lane.Top), new Point(x, lane.Bottom));
             }
+        }
+    }
+
+    private void UpdateOverlayLanes()
+    {
+        if (_timeline == null)
+        {
+            _overlayLanes = new();
+            _overlayLaneCount = 0;
+            return;
+        }
+
+        (_overlayLanes, _overlayLaneCount) = OverlayLayout.AssignLanes(_timeline.Overlays);
+    }
+
+    /// <summary>Balken eines Objekts verschieben oder an einem Ende länger/kürzer ziehen.</summary>
+    private void MoveOverlayBar(TimeSpan t)
+    {
+        if (_timeline is not { } tl || _dragOverlay is not { } id)
+        {
+            return;
+        }
+
+        var duration = tl.Duration.TotalSeconds;
+        var delta = (t - _dragDownTime).TotalSeconds;
+        var min = EditTimeline.MinSegment.TotalSeconds * 3;
+        double start = _dragOverlayStart, end = _dragOverlayEnd;
+        switch (_drag)
+        {
+            case DragMode.OverlayMove:
+                var length = end - start;
+                start = Math.Clamp(start + delta, 0, Math.Max(0, duration - length));
+                end = start + length;
+                break;
+            case DragMode.OverlayStart:
+                start = Math.Clamp(start + delta, 0, end - min);
+                break;
+            default:
+                end = Math.Clamp(end + delta, start + min, duration);
+                break;
+        }
+
+        tl.UpdateOverlay(id, o =>
+        {
+            o.Start = start;
+            o.End = end;
+        }, recordUndo: false);
+        SeekRequested?.Invoke(this, TimeSpan.FromSeconds(_drag == DragMode.OverlayEnd ? end : start));
+    }
+
+    private Rect OverlayBarRect(OverlayItem item)
+    {
+        var lane = _overlayLanes.TryGetValue(item.Id, out var l) ? l : 0;
+        var left = X(TimeSpan.FromSeconds(item.Start));
+        var right = X(TimeSpan.FromSeconds(item.End));
+        return new Rect(left, LanesTop + lane * ObjectLaneHeight + 1, Math.Max(6, right - left), ObjectLaneHeight - 6);
+    }
+
+    /// <summary>Objekt-Balken unter dem Punkt; Edge −1 = linker Rand, 1 = rechter Rand, 0 = Mitte.</summary>
+    private (string Id, int Edge)? OverlayBarAt(Point p)
+    {
+        if (_timeline is not { } tl)
+        {
+            return null;
+        }
+
+        // Vorne liegende zuerst (falls sich Balken berühren)
+        for (var i = tl.Overlays.Count - 1; i >= 0; i--)
+        {
+            var item = tl.Overlays[i];
+            var rect = OverlayBarRect(item);
+            var hit = new Rect(rect.Left - 3, rect.Top, rect.Width + 6, rect.Height);
+            if (!hit.Contains(p))
+            {
+                continue;
+            }
+
+            var edge = rect.Width >= 18 && p.X <= rect.Left + EdgeGrab ? -1
+                : rect.Width >= 18 && p.X >= rect.Right - EdgeGrab ? 1
+                : 0;
+            return (item.Id, edge);
+        }
+
+        return null;
+    }
+
+    /// <summary>Farbe des Balkens: Objektfarbe, zu dunkle/helle etwas angepasst, damit man sie sieht.</summary>
+    public static Color BarColor(OverlayItem item)
+    {
+        if (item.Kind == OverlayKind.Blur)
+        {
+            return Color.FromRgb(0x6B, 0x7A, 0x90);
+        }
+
+        if (item.Kind == OverlayKind.Image)
+        {
+            return Color.FromRgb(0x4F, 0x8A, 0x8B);
+        }
+
+        var c = (Color)ColorConverter.ConvertFromString(item.Color);
+        var lum = (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255;
+        if (lum < 0.18)
+        {
+            return Color.FromRgb(0x4A, 0x44, 0x52);
+        }
+
+        return lum > 0.88 ? Color.FromRgb(0x8D, 0x87, 0x96) : c;
+    }
+
+    /// <summary>Objekt-Reihen: pro Objekt ein Balken in seiner Farbe, mit Ebenen-Nummer (1 = ganz vorne) und Namen.</summary>
+    private void DrawObjectLanes(DrawingContext dc, EditTimeline tl, Rect strip, double inX, double outX)
+    {
+        var rows = ObjectLaneRows;
+        for (var i = 0; i < rows; i++)
+        {
+            var lane = new Rect(strip.Left, LanesTop + i * ObjectLaneHeight, strip.Width, ObjectLaneHeight - 4);
+            dc.DrawRoundedRectangle(LaneBrush, null, lane, 4, 4);
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var count = tl.Overlays.Count;
+        for (var i = 0; i < count; i++)
+        {
+            var item = tl.Overlays[i];
+            var rect = OverlayBarRect(item);
+            var color = BarColor(item);
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            var selected = item.Id == _selectedOverlay;
+            var hovered = item.Id == _hoverOverlay;
+            var pen = selected ? new Pen(Brushes.White, 2) : hovered ? new Pen(new SolidColorBrush(Color.FromArgb(0xC0, 0xFF, 0xFF, 0xFF)), 1.5) : new Pen(new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)), 1);
+            dc.DrawRoundedRectangle(brush, pen, rect, 4, 4);
+
+            var lum = (0.2126 * color.R + 0.7152 * color.G + 0.0722 * color.B) / 255;
+            var textBrush = lum > 0.6 ? Brushes.Black : Brushes.White;
+            var text = new FormattedText(
+                $"{count - i}  {item.Label}",
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                new Typeface(Font.FontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
+                11,
+                textBrush,
+                dpi);
+            dc.PushClip(new RectangleGeometry(new Rect(rect.Left + 4, rect.Top, Math.Max(0, rect.Width - 8), rect.Height)));
+            dc.DrawText(text, new Point(rect.Left + 7, rect.Top + (rect.Height - text.Height) / 2));
+            dc.Pop();
+
+            // Kleine Griffe an den Enden, wenn ausgewählt
+            if (selected && rect.Width >= 18)
+            {
+                var grip = new Pen(new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0xFF, 0xFF)), 1);
+                dc.DrawLine(grip, new Point(rect.Left + 3, rect.Top + 4), new Point(rect.Left + 3, rect.Bottom - 4));
+                dc.DrawLine(grip, new Point(rect.Right - 3, rect.Top + 4), new Point(rect.Right - 3, rect.Bottom - 4));
+            }
+        }
+
+        // Was nicht im Export landet, wie oben abdunkeln
+        var top = LanesTop;
+        var height = rows * ObjectLaneHeight - 4;
+        if (inX > strip.Left)
+        {
+            dc.DrawRectangle(OutsideBrush, null, new Rect(strip.Left, top, inX - strip.Left, height));
+        }
+
+        if (outX < strip.Right)
+        {
+            dc.DrawRectangle(OutsideBrush, null, new Rect(outX, top, strip.Right - outX, height));
         }
     }
 

@@ -119,6 +119,24 @@ public sealed class AppSettings
     /// <summary>Tonspuren im Editor eingeklappt (nur Filmstreifen + kleine An/Aus-Knöpfe). Gilt für alle Clips.</summary>
     public bool TracksCollapsed { get; set; }
 
+    /// <summary>Unter dem Filmstreifen die Objekt-Reihen statt der Tonspuren zeigen.</summary>
+    public bool ShowObjectLanes { get; set; }
+
+    /// <summary>Zuletzt selbst gewählte Farben für Objekte ("#RRGGBB"), neueste zuerst.</summary>
+    public List<string> CustomColors { get; set; } = new();
+
+    /// <summary>Merkt eine eigene Farbe (höchstens 6, keine doppelten).</summary>
+    public void RememberColor(string color)
+    {
+        color = Editing.OverlayItem.NormalizeColor(color);
+        CustomColors.RemoveAll(c => string.Equals(c, color, StringComparison.OrdinalIgnoreCase));
+        CustomColors.Insert(0, color);
+        if (CustomColors.Count > 6)
+        {
+            CustomColors.RemoveRange(6, CustomColors.Count - 6);
+        }
+    }
+
     /// <summary>Warnen, wenn die Festplatte mit den Clips fast voll ist.</summary>
     public bool DiskWarningEnabled { get; set; } = true;
 

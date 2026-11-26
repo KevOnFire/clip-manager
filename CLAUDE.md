@@ -38,6 +38,7 @@ Aufnehmen macht OBS (Replay-Puffer), nicht dieses Programm.
 | Name/Icon | Programm heißt **Clippy** (seit 24.11.2026), Icon `src/ClipManager/Assets/clippy.ico/.png` (von Kev). Die exe heißt bewusst weiter `ClipManager.exe`, Ordner/Namespaces auch | Alte Versionen prüfen beim Update auf `ClipManager.exe` im ZIP; Umbenennen der exe würde den Update-Knopf kaputt machen |
 | Editor | Läuft im Hauptfenster (`EditorView`, UserControl) statt eigenem Fenster; Vollbild per F/Doppelklick/Knopf, Esc beendet | Kev wollte kein 2. Fenster (24.11.2026) |
 | Vorschau im Editor | Bild: WPF `MediaElement` (stumm), mit Farbkorrektur-Shader `Editor/Shaders/VideoLevels.fx` (16–235 → 0–255, wird im Workflow mit `fxc` übersetzt, in den Einstellungen abschaltbar). Beim Abspielen gibt der Ton den Takt vor, das Bild wird nachgezogen (Windows-Player meldet nach Sprüngen alte Positionen). Ton: Spuren per FFmpeg als WAV in den Cache, mit NAudio gemischt (`TrackPlayer`), Video ist der Takt, Ton wird bei >150 ms Abweichung nachgezogen (nicht in den ersten 800 ms nach Start/Sprung). Die NAudio-Ausgabe läuft durchgehend (Pause = Stille), gesprungen wird im Mixer: Stop()+Play() direkt hintereinander ließ bei NAudio zwei Abspiel-Threads laufen (Ton doppelt) | Hört genau, was exportiert wird. Bis die WAVs fertig sind, spielt MediaElement Spur 1 |
+| Zeichen-Werkzeuge (Objekte im Video) | Stift-Knopf unten links im Video öffnet schmal nach oben Box, Kreis, Unschärfe, Text, Stift, Bild. Objekte: `OverlayItem` (Core/Editing) in `ClipEditState.Overlays`, Ort/Größe als Anteil des Bildes (0..1), Zeiten in Sekunden im Original, Drehung um die Mitte, Z = Ebene (Liste in `EditTimeline` hinten→vorne). Vorschau: `OverlayVisuals` über dem Video (`VideoFrame` liegt genau aufs Bild), Unschärfe-Vorschau per `VisualBrush` des Players + `BlurEffect`. Export: dieselben Bausteine werden per `RenderTargetBitmap` als PNG in Originalauflösung gezeichnet (`OverlayVisuals.RenderLayers`), FFmpeg legt sie per `overlay` mit `enable=between(t,…)` drüber; Unschärfe = `crop`+`boxblur`+`alphamerge` mit Masken-PNG. Alles vor `trim/concat`. Unter dem Filmstreifen Umschalter Ton/Objekte (`ShowObjectLanes`), Objekte als Balken in Reihen (`OverlayLayout.AssignLanes`), links Ebenen-Liste (oben = vorne, ziehen). Rechtsklick-Ziehen auf dem Filmstreifen = Bereich + Menü. Eigene Farben per Farbkreis (`ColorWheel`), gemerkt in `CustomColors`. Eingefügte Bilder werden nach `%AppData%\ClipManager\Objekt-Bilder` kopiert | Kev (26.11.2026), Vorschau https://claude.ai/artifact/BDhDDmLmDQeWXouVuB2LU6 |
 
 Falls MediaElement bei manchen Formaten (MKV, HEVC) nicht reicht: LibVLC/mpv nur fürs Bild.
 
@@ -73,6 +74,8 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
                           Bedienung: in Spur ziehen = Auswahl → Menü (stumm / Lautstärke ändern / rausschneiden), Ränder von stummen und
                           rausgeschnittenen Stellen ziehbar, Klick auf so eine Stelle = Menü (wieder laut / reinnehmen)
   Editor/ExportWindow     Export-/Speichern-Dialog (auch "Schnellspeichern": exportiert volle Qualität und ersetzt das Original ohne Nachfrage): Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Original ersetzen / Kopie / Speichern unter
+  Editor/EditorView.Overlays.cs  Zeichen-Werkzeuge: Objekte einfügen/ziehen/drehen, Eigenschaften-Leiste, Ebenen-Liste, Stift, Rechtsklick-Menü
+  Editor/OverlayVisuals   Zeichnet Objekte für Vorschau und Export (PNG), ColorWheel = Farbkreis
   Editor/TrackPlayer      NAudio: Spuren gemischt abspielen (an/aus, Lautstärke, stumme Stellen)
   Editor/TrackRowViewModel  Spur-Kopf (Farbstreifen, Name, Haken, Lautstärke); Namen und Farben global in settings.json
                           (TrackNames, TrackColors; Standardfarben in AppSettings.Palette)
@@ -110,6 +113,7 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | --- | --- |
 | Einstellungen (auch Fenstergröße, Vorschau-Lautstärke, Design) | `%AppData%\ClipManager\settings.json` |
 | Favoriten, Clip-Infos, Schnitte (Tabelle `edits`), eigene Namen (`display_names`), Kategorien (`categories`, `clip_categories`), angeschaute Clips (`seen`) | `%AppData%\ClipManager\library.db` |
+| Eingefügte Bilder für Objekte (Kopie, Name = Prüfsumme) | `%AppData%\ClipManager\Objekt-Bilder\` |
 | Vorschaubilder, Filmstreifen | `%LocalAppData%\ClipManager\thumbs\` (oder eigener Ordner `CacheFolder`) |
 | Tonspuren als WAV (Cache, 3 Tage seit letzter Nutzung, höchstens `AudioCacheMaxGb`, Standard 5 GB) | `%LocalAppData%\ClipManager\audio\` (oder eigener Ordner `CacheFolder`) |
 | Zwischen-Exporte (2 Tage) | `%TEMP%\ClipManager\Export\` |

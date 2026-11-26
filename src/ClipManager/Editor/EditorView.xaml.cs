@@ -61,6 +61,9 @@ public partial class EditorView : System.Windows.Controls.UserControl
         TimelineView.MutedClicked += (_, e) => ShowMenu(("Wieder laut machen", Wpf.Ui.Controls.SymbolRegular.Speaker224, () => _timeline?.UnmuteTrackAt(e.Track, e.Time)));
         TimelineView.DuckClicked += (_, e) => _ = EditVolumeAsync(e.Track, e.Time);
         TimelineView.RemovedClicked += (_, t) => ShowMenu(("Wieder reinnehmen", Wpf.Ui.Controls.SymbolRegular.ArrowUndo24, () => _timeline?.RestoreAt(t)));
+        InitOverlays();
+        _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _saveTimer.Tick += (_, _) => FlushEdits();
 
         Player.Volume = VolumeSlider.Value;
 
@@ -90,6 +93,8 @@ public partial class EditorView : System.Windows.Controls.UserControl
     }
 
     private bool _started;
+    private readonly DispatcherTimer _saveTimer;
+    private bool _editsDirty;
 
     // ---------- Spuren ein-/ausklappen ----------
 
@@ -419,6 +424,9 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
         _timeline.Changed += Timeline_Changed;
         TimelineView.Timeline = _timeline;
+        UpdateVideoFrame();
+        SyncOverlays(rebuild: true);
+        BuildLayerList();
         UpdateTexts();
         // Direkt ab dem Anfang des Schnitts abspielen. Erst abspielen, dann springen: Ein Sprung direkt
         // nach dem Öffnen geht beim Windows-Player sonst manchmal verloren. Der Timer springt zur Not nochmal.
@@ -444,12 +452,14 @@ public partial class EditorView : System.Windows.Controls.UserControl
         TrackHeaders.ItemsSource = _trackRows;
         CompactTrackList.ItemsSource = _trackRows;
         TimelineView.TrackColors = Enumerable.Range(0, count).Select(i => TrackColorOf(i)).ToList();
-        TracksHint.Text = count switch
+        _audioHint = count switch
         {
             0 => "Dieser Clip hat keinen Ton.",
             1 => "Tonspur",
             _ => "Tonspuren · Haken = im Export · In einer Spur ziehen zum Stummschalten oder Rausschneiden",
         };
+        TracksHint.Text = _audioHint;
+        UpdateTracksHint();
     }
 
     /// <summary>Spuren als WAV holen, Wellenformen berechnen, Spuren-Vorschau starten.</summary>
@@ -608,6 +618,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         TimelineView.Position = pos;
         UpdatePositionText(pos);
         UpdateSeekSlider(pos);
+        UpdateOverlayVisibility(pos);
     }
 
     /// <summary>
@@ -736,6 +747,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         Player.Position = t;
         TimelineView.Position = t;
         UpdatePositionText(t);
+        UpdateOverlayVisibility(t);
         if (_playing && _audio != null)
         {
             _audio.Play(t);
@@ -757,6 +769,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         _lastSeekAt = DateTime.UtcNow;
         TimelineView.Position = t;
         UpdatePositionText(t);
+        UpdateOverlayVisibility(t);
     }
 
     private void Step(TimeSpan delta) => Seek(Position + delta);
@@ -796,7 +809,24 @@ public partial class EditorView : System.Windows.Controls.UserControl
         }
 
         UpdateTexts();
-        SaveEdits();
+        SyncOverlays();
+        BuildLayerList();
+
+        // Speichern gebündelt (beim Ziehen kommen viele Änderungen pro Sekunde).
+        _editsDirty = true;
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    /// <summary>Noch nicht gespeicherte Änderungen jetzt speichern.</summary>
+    private void FlushEdits()
+    {
+        _saveTimer.Stop();
+        if (_editsDirty)
+        {
+            _editsDirty = false;
+            SaveEdits();
+        }
     }
 
     private void SaveEdits()
@@ -876,6 +906,12 @@ public partial class EditorView : System.Windows.Controls.UserControl
             return;
         }
 
+        if (HandleOverlayKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         var frame = TimeSpan.FromSeconds(1 / _fps);
@@ -930,6 +966,19 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
     private void Video_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // Klick neben ein Objekt: erst Auswahl bzw. Werkzeug-Menü schließen, nicht gleich abspielen.
+        if (_penMode)
+        {
+            return;
+        }
+
+        if (_toolsOpen || _selectedOverlay != null)
+        {
+            CloseTools();
+            SelectOverlay(null);
+            return;
+        }
+
         if (e.ClickCount == 2)
         {
             // Doppelklick: Vollbild. Der erste Klick hat schon Play/Pause umgeschaltet, das zurücknehmen.
@@ -955,6 +1004,14 @@ public partial class EditorView : System.Windows.Controls.UserControl
 
         IsFullscreen = on;
         var editing = on ? Visibility.Collapsed : Visibility.Visible;
+        if (on)
+        {
+            EndPenMode();
+            CloseTools();
+            SelectOverlay(null);
+        }
+
+        OverlayTools.Visibility = editing;
         HeaderBar.Visibility = editing;
         TracksArea.Visibility = editing;
         ToolsBar.Visibility = editing;
@@ -1210,6 +1267,10 @@ public partial class EditorView : System.Windows.Controls.UserControl
             return;
         }
 
+        // Gelöschter Clip: keine Schnitte mehr nachspeichern.
+        _saveTimer.Stop();
+        _editsDirty = false;
+
         // Player und Tonspuren lassen die Datei los, sonst kann Windows sie nicht verschieben.
         _timer.Stop();
         _audio?.Dispose();
@@ -1271,6 +1332,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
         }
 
         SetPlaying(false);
+        FlushEdits();
         var dialog = new ExportWindow(_clip, _info, _timeline, saveMode, this, quickReplace) { Owner = Window.GetWindow(this) };
         dialog.ShowDialog();
         if (dialog.OriginalReplaced)
@@ -1289,6 +1351,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
     /// </summary>
     public void ReleaseClip()
     {
+        FlushEdits();
         WatchMonitor(false);
         _timer.Stop();
         _timeline!.Changed -= Timeline_Changed;
@@ -1320,6 +1383,7 @@ public partial class EditorView : System.Windows.Controls.UserControl
             Log.Error("Einstellungen konnten nicht gespeichert werden", ex);
         }
 
+        FlushEdits();
         _closed = true;
         WatchMonitor(false);
         SetFullscreen(false);

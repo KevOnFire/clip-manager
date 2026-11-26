@@ -5,6 +5,43 @@
     xmlns:editor="clr-namespace:ClipManager.Editor"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     FocusVisualStyle="{x:Null}">
+    <UserControl.Resources>
+        <!-- Runde Knöpfe für die Zeichen-Werkzeuge unten links im Video -->
+        <Style x:Key="RoundToolButton" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="ToolTipService.Placement" Value="Right" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="16">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ToolIcon" TargetType="Path">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="Stroke" Value="White" />
+            <Setter Property="StrokeThickness" Value="2" />
+            <Setter Property="StrokeStartLineCap" Value="Round" />
+            <Setter Property="StrokeEndLineCap" Value="Round" />
+            <Setter Property="StrokeLineJoin" Value="Round" />
+        </Style>
+    </UserControl.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -71,16 +108,30 @@
             Background="Black"
             CornerRadius="8"
             MouseLeftButtonDown="Video_MouseLeftButtonDown">
-            <Grid>
-                <MediaElement
-                    x:Name="Player"
-                    LoadedBehavior="Manual"
-                    MediaEnded="Player_MediaEnded"
-                    MediaFailed="Player_MediaFailed"
-                    MediaOpened="Player_MediaOpened"
-                    ScrubbingEnabled="True"
-                    Stretch="Uniform"
-                    UnloadedBehavior="Close" />
+            <Grid x:Name="VideoArea" ClipToBounds="True" SizeChanged="VideoArea_SizeChanged">
+                <!-- Genau so groß wie das Bild (ohne schwarze Ränder), damit Objekte an der richtigen Stelle liegen -->
+                <Grid
+                    x:Name="VideoFrame"
+                    LostMouseCapture="VideoFrame_LostMouseCapture"
+                    MouseLeftButtonUp="VideoFrame_MouseLeftButtonUp"
+                    MouseMove="VideoFrame_MouseMove"
+                    PreviewMouseLeftButtonDown="VideoFrame_PreviewMouseLeftButtonDown">
+                    <MediaElement
+                        x:Name="Player"
+                        LoadedBehavior="Manual"
+                        MediaEnded="Player_MediaEnded"
+                        MediaFailed="Player_MediaFailed"
+                        MediaOpened="Player_MediaOpened"
+                        ScrubbingEnabled="True"
+                        Stretch="Uniform"
+                        UnloadedBehavior="Close" />
+                    <!-- Objekte (Boxen, Text, Unschärfe …) -->
+                    <Canvas x:Name="OverlayCanvas" ClipToBounds="True" />
+                    <!-- Rahmen mit Griffen um das ausgewählte Objekt -->
+                    <Canvas x:Name="OverlayEditCanvas" />
+                    <!-- Strich, der gerade mit dem Stift gemalt wird -->
+                    <Canvas x:Name="PenCanvas" IsHitTestVisible="False" />
+                </Grid>
                 <TextBlock
                     x:Name="LoadingText"
                     HorizontalAlignment="Center"
@@ -88,6 +139,95 @@
                     FontSize="16"
                     Foreground="#AAFFFFFF"
                     Text="Lädt …" />
+
+                <!-- Eigenschaften des ausgewählten Objekts -->
+                <Border
+                    x:Name="OverlayPropsBar"
+                    Margin="12"
+                    Padding="10,6"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Background="#F01D1A22"
+                    BorderBrush="#40FFFFFF"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    MouseLeftButtonDown="Swallow_MouseDown"
+                    Visibility="Collapsed">
+                    <WrapPanel x:Name="OverlayPropsPanel" MaxWidth="900" VerticalAlignment="Center" />
+                </Border>
+
+                <!-- Hinweis (z.B. beim Malen) -->
+                <Border
+                    x:Name="OverlayHintBar"
+                    Margin="12"
+                    Padding="12,6"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Background="#F01D1A22"
+                    CornerRadius="8"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed">
+                    <TextBlock x:Name="OverlayHintText" Foreground="White" />
+                </Border>
+
+                <!-- Stift-Knopf unten links: öffnet schmal nach oben die Werkzeuge -->
+                <StackPanel
+                    x:Name="OverlayTools"
+                    Width="40"
+                    Margin="12"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    MouseLeftButtonDown="Swallow_MouseDown">
+                    <Border
+                        x:Name="OverlayToolStack"
+                        Margin="0,0,0,6"
+                        Padding="0,4"
+                        Background="#F01D1A22"
+                        BorderBrush="#40FFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="20"
+                        RenderTransformOrigin="0.5,1"
+                        Visibility="Collapsed">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="OverlayToolScale" ScaleY="0" />
+                        </Border.RenderTransform>
+                        <StackPanel HorizontalAlignment="Center">
+                            <Button Click="AddBox_Click" Style="{StaticResource RoundToolButton}" ToolTip="Box">
+                                <Path Data="M4,5 H20 V19 H4 Z" Style="{StaticResource ToolIcon}" />
+                            </Button>
+                            <Button Click="AddCircle_Click" Style="{StaticResource RoundToolButton}" ToolTip="Kreis">
+                                <Path Data="M12,4 A8,8 0 1 1 11.99,4 Z" Style="{StaticResource ToolIcon}" />
+                            </Button>
+                            <Button Click="AddBlur_Click" Style="{StaticResource RoundToolButton}" ToolTip="Unschärfe (zum Zensieren)">
+                                <Path Data="M3,3 H8 V8 H3 Z M10,3 H15 V8 H10 Z M17,3 H21 V8 H17 Z M3,10 H8 V15 H3 Z M10,10 H15 V15 H10 Z M17,10 H21 V15 H17 Z M3,17 H8 V21 H3 Z M10,17 H15 V21 H10 Z M17,17 H21 V21 H17 Z" Fill="#B0FFFFFF" Stroke="{x:Null}" Style="{StaticResource ToolIcon}" />
+                            </Button>
+                            <Button Click="AddText_Click" Style="{StaticResource RoundToolButton}" ToolTip="Text">
+                                <Path Data="M5,5 H19 M12,5 V20" Style="{StaticResource ToolIcon}" />
+                            </Button>
+                            <Button Click="AddPen_Click" Style="{StaticResource RoundToolButton}" ToolTip="Stift (malen)">
+                                <Path Data="M3,17 C6,11 9,19 12,14 S17,8 21,10" Style="{StaticResource ToolIcon}" />
+                            </Button>
+                            <Button Click="AddImage_Click" Style="{StaticResource RoundToolButton}" ToolTip="Bild (PNG, JPG …)">
+                                <Path Data="M4,5 H20 V19 H4 Z M4,16 L9,11 L13,15 L16,12 L20,16 M15,8.5 A1,1 0 1 1 14.99,8.5" Style="{StaticResource ToolIcon}" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                    <Button
+                        x:Name="PencilButton"
+                        Width="40"
+                        Height="40"
+                        Margin="0"
+                        Background="#C0141218"
+                        Click="Pencil_Click"
+                        Style="{StaticResource RoundToolButton}"
+                        ToolTip="Zeichnen: Box, Kreis, Unschärfe, Text, Stift, Bild">
+                        <Path
+                            Width="20"
+                            Height="20"
+                            Data="M12,20 H21 M16.5,3.5 A2.1,2.1 0 0 1 19.5,6.5 L7,19 L3,20 L4,16 Z"
+                            Style="{StaticResource ToolIcon}" />
+                    </Button>
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -184,16 +324,39 @@
                 Width="258"
                 ClipToBounds="True">
                 <DockPanel Width="250" Height="92" HorizontalAlignment="Left">
-                    <ui:Button
-                        Margin="0,0,0,6"
-                        Padding="8,3"
-                        Click="CollapseTracks_Click"
-                        Content="Spuren einklappen"
-                        DockPanel.Dock="Bottom"
-                        FontSize="12"
-                        Focusable="False"
-                        Icon="{ui:SymbolIcon ChevronDoubleRight20}"
-                        ToolTip="Tonspuren einklappen, damit das Video mehr Platz hat" />
+                    <DockPanel Margin="0,0,0,6" DockPanel.Dock="Bottom">
+                        <ui:Button
+                            Padding="8,3"
+                            Click="CollapseTracks_Click"
+                            Content="Einklappen"
+                            DockPanel.Dock="Left"
+                            FontSize="12"
+                            Focusable="False"
+                            Icon="{ui:SymbolIcon ChevronDoubleRight20}"
+                            ToolTip="Spuren einklappen, damit das Video mehr Platz hat" />
+                        <!-- Umschalter: unter dem Filmstreifen Tonspuren oder Objekte zeigen -->
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                            <ui:Button
+                                x:Name="AudioModeButton"
+                                Padding="10,3"
+                                Appearance="Primary"
+                                Click="AudioMode_Click"
+                                Content="Ton"
+                                FontSize="12"
+                                Focusable="False"
+                                ToolTip="Tonspuren zeigen" />
+                            <ui:Button
+                                x:Name="ObjectsModeButton"
+                                Margin="4,0,0,0"
+                                Padding="10,3"
+                                Appearance="Secondary"
+                                Click="ObjectsMode_Click"
+                                Content="Objekte"
+                                FontSize="12"
+                                Focusable="False"
+                                ToolTip="Objekte (Boxen, Text, Unschärfe …) zeigen, mit Ebenen" />
+                        </StackPanel>
+                    </DockPanel>
                     <TextBlock
                         x:Name="TracksHint"
                         Padding="0,6,0,0"
@@ -203,6 +366,15 @@
                         TextTrimming="CharacterEllipsis"
                         TextWrapping="Wrap" />
                 </DockPanel>
+                <!-- Ebenen-Liste: oben = ganz vorne, Einträge ziehen zum Umsortieren -->
+                <ScrollViewer
+                    x:Name="LayerArea"
+                    Width="250"
+                    HorizontalAlignment="Left"
+                    VerticalScrollBarVisibility="Auto"
+                    Visibility="Collapsed">
+                    <StackPanel x:Name="LayerList" />
+                </ScrollViewer>
                 <ItemsControl x:Name="TrackHeaders" Width="250" HorizontalAlignment="Left">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type editor:TrackRowViewModel}">
