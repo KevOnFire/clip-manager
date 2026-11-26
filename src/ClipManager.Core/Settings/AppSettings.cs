@@ -125,6 +125,10 @@ public sealed class AppSettings
     /// <summary>Zuletzt selbst gewählte Farben für Objekte ("#RRGGBB"), neueste zuerst.</summary>
     public List<string> CustomColors { get; set; } = new();
 
+    /// <summary>Entfernt eine selbst gewählte Farbe. True, wenn sie dabei war.</summary>
+    public bool ForgetColor(string color) =>
+        CustomColors.RemoveAll(c => string.Equals(c, Editing.OverlayItem.NormalizeColor(color), StringComparison.OrdinalIgnoreCase)) > 0;
+
     /// <summary>Merkt eine eigene Farbe (höchstens 6, keine doppelten).</summary>
     public void RememberColor(string color)
     {

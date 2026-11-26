@@ -941,6 +941,30 @@ public partial class EditorView
                 };
                 var value = c;
                 swatch.Click += (_, _) => SetColor(value);
+                if (!Palette.Contains(c, StringComparer.OrdinalIgnoreCase))
+                {
+                    // Eigene Farbe: Rechtsklick → entfernen
+                    swatch.ToolTip = $"{c} · Rechtsklick zum Entfernen";
+                    var remove = new MenuItem { Header = "Farbe entfernen" };
+                    remove.Click += (_, _) =>
+                    {
+                        if (App.Settings.ForgetColor(value))
+                        {
+                            try
+                            {
+                                App.SaveSettings();
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Error("Einstellungen konnten nicht gespeichert werden", ex);
+                            }
+                        }
+
+                        BuildOverlayProps();
+                    };
+                    swatch.ContextMenu = new ContextMenu { Items = { remove } };
+                }
+
                 OverlayPropsPanel.Children.Add(swatch);
             }
 
