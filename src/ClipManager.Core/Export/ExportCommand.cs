@@ -8,10 +8,14 @@ namespace ClipManager.Core.Export;
 /// Ein Objekt zum Einbrennen als fertig gezeichnetes PNG (macht die Oberfläche, genau wie in der Vorschau).
 /// Liegt bei <paramref name="Area"/> im Bild (Originalauflösung), sichtbar von Start bis End (Sekunden im Original).
 /// Unschärfe: Das PNG ist eine Maske (weiß = verwischen, schwarz = nicht) und BlurRadius &gt; 0.
+/// Bewegtes Bild (GIF): FrameRate &gt; 0 und ImagePath ist ein Muster wie "objekt3_%04d.png" (Bilder ab 1),
+/// das in Schleife läuft und beim Start des Objekts mit dem ersten Bild beginnt.
 /// </summary>
-public sealed record OverlayLayer(string ImagePath, PixelRect Area, double Start, double End, int BlurRadius = 0)
+public sealed record OverlayLayer(string ImagePath, PixelRect Area, double Start, double End, int BlurRadius = 0, double FrameRate = 0)
 {
     public bool IsBlur => BlurRadius > 0;
+
+    public bool IsAnimated => FrameRate > 0 && !IsBlur;
 }
 
 /// <summary>Baut die FFmpeg-Befehlszeile für einen Export.</summary>
@@ -47,12 +51,13 @@ public static class ExportCommand
             "-ss", F(offset.TotalSeconds), "-t", F((end - offset).TotalSeconds), "-i", input,
         };
 
-        // Jedes Objekt-Bild als eigene Quelle, wiederholt über die ganze Länge.
+        // Jedes Objekt-Bild als eigene Quelle, wiederholt über die ganze Länge (GIF: Bildfolge in Schleife).
         foreach (var layer in layers)
         {
+            var rate = layer.IsAnimated ? layer.FrameRate : sourceFps > 1 ? sourceFps : 60;
             args.AddRange(new[]
             {
-                "-framerate", F(sourceFps > 1 ? sourceFps : 60), "-loop", "1", "-t", F((end - offset).TotalSeconds + 1), "-i", layer.ImagePath,
+                "-framerate", F(rate), "-loop", "1", "-t", F((end - offset).TotalSeconds + 1), "-i", layer.ImagePath,
             });
         }
 
@@ -257,6 +262,12 @@ public static class ExportCommand
                 sb.Append($"{input}format=gray[o{k}m];");
                 sb.Append($"[o{k}c][o{k}m]alphamerge[o{k}d];");
                 sb.Append($"[o{k}a][o{k}d]overlay={a.X}:{a.Y}:{enable}[ol{k}];");
+            }
+            else if (layer.IsAnimated)
+            {
+                // GIF beginnt beim Start des Objekts mit dem ersten Bild (wie in der Vorschau).
+                sb.Append($"{input}setpts=PTS-STARTPTS+{F(start)}/TB[g{k}];");
+                sb.Append($"{current}[g{k}]overlay={a.X}:{a.Y}:{enable}[ol{k}];");
             }
             else
             {
