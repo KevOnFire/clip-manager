@@ -134,4 +134,18 @@ public static class LibraryQuery
         var safePage = Math.Clamp(page, 0, PageCount(items.Count, pageSize) - 1);
         return items.Skip(safePage * pageSize).Take(pageSize).ToList();
     }
+
+    /// <summary>Seite (0-basiert), auf der der Clip mit diesem Pfad liegt, oder null, wenn er nicht (mehr) in der Liste ist.</summary>
+    public static int? PageOf(IReadOnlyList<ClipFile> items, string path, int pageSize)
+    {
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (string.Equals(items[i].Path, path, StringComparison.OrdinalIgnoreCase))
+            {
+                return pageSize > 0 ? i / pageSize : 0;
+            }
+        }
+
+        return null;
+    }
 }

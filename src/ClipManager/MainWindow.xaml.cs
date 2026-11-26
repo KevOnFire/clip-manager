@@ -259,6 +259,7 @@ public partial class MainWindow : FluentWindow
         {
             if (ReferenceEquals(_editor, editor))
             {
+                _library.FocusClip(editor.ClipPath);
                 _editor = null;
                 ShowLibrary();
             }
@@ -427,6 +428,12 @@ public partial class MainWindow : FluentWindow
 
     private Task ShowLibrary()
     {
+        // Aus dem Editor zurück: auf der Seite mit diesem Clip landen, er leuchtet kurz auf.
+        if (_editor != null)
+        {
+            _library.FocusClip(_editor.ClipPath);
+        }
+
         CloseEditor();
         PageHost.Content = _library;
         LibraryNav.Appearance = ControlAppearance.Primary;

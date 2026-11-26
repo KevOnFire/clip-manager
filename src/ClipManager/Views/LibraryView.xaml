@@ -225,7 +225,7 @@
                 </StackPanel>
                 </Grid>
             </Border>
-            <!-- Neue Clips leuchten beim Anzeigen ein paar Sekunden lang auf -->
+            <!-- Neue Clips leuchten beim Anzeigen ein paar Sekunden lang auf, ebenso der Clip, aus dem man gerade zurückkommt -->
             <Grid IsHitTestVisible="False" Opacity="0">
                 <Grid.Style>
                     <Style TargetType="Grid">
@@ -238,6 +238,26 @@
                                                 AutoReverse="True"
                                                 BeginTime="0:0:0.3"
                                                 RepeatBehavior="3x"
+                                                Storyboard.TargetProperty="Opacity"
+                                                From="0"
+                                                To="1"
+                                                Duration="0:0:0.6">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <SineEase EasingMode="EaseInOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsFlashing}" Value="True">
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation
+                                                AutoReverse="True"
+                                                BeginTime="0:0:0.3"
+                                                RepeatBehavior="2x"
                                                 Storyboard.TargetProperty="Opacity"
                                                 From="0"
                                                 To="1"
