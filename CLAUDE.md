@@ -51,7 +51,8 @@ src/ClipManager.Core/     Logik ohne Oberfläche (net8.0, läuft auch unter Linu
   Media/                  FfmpegLocator, FfmpegProbe (Version + GPU-Test), MediaInfo (ffprobe), ThumbnailCache, FilmstripCache (Zeitleiste), AudioTrackCache + Waveform (Spuren als WAV), ProcessRunner
   Export/                 ExportPlanner (Bitrate/Auflösung aus Limit), ExportCommand (FFmpeg-Filtergraph), Exporter (Lauf, Fortschritt, Größen-Check + Wiederholung)
   Updates/                UpdateChecker (GitHub-API), UpdateScript (cmd zum Ersetzen + Neustart)
-  Storage/                DiskUsage (freier Speicher der Laufwerke mit Clip-Ordnern, Anzeige oben + Warnung ab DiskWarningPercent, Standard 95 %)
+  Storage/                DiskUsage (freier Speicher der Laufwerke mit Clip-Ordnern, Anzeige oben + Warnung ab DiskWarningPercent, Standard 95 %),
+                          CacheFolder (Zwischenspeicher: Ort wählbar, Umzug der Dateien, Größe, Leeren, Tonspuren auf AudioCacheMaxGb begrenzt, Standard 5 GB)
 src/ClipManager/          WPF-Oberfläche (net8.0-windows)
   App.xaml(.cs)           Start, globale Dienste (Settings, Db, Thumbnails). Lädt in StartAsync Schritt für Schritt und zeigt dabei den SplashWindow
   SplashWindow            Startbildschirm (Variante A „Karte“, von Kev gewählt 25.11.2026): Logo ploppt rein, Name/Infos gleiten nach, Ladebalken mit echten
@@ -109,8 +110,8 @@ Grundregel: Alles, was sich ohne Fenster testen lässt, gehört nach `ClipManage
 | --- | --- |
 | Einstellungen (auch Fenstergröße, Vorschau-Lautstärke, Design) | `%AppData%\ClipManager\settings.json` |
 | Favoriten, Clip-Infos, Schnitte (Tabelle `edits`), eigene Namen (`display_names`), Kategorien (`categories`, `clip_categories`), angeschaute Clips (`seen`) | `%AppData%\ClipManager\library.db` |
-| Vorschaubilder, Filmstreifen | `%LocalAppData%\ClipManager\thumbs\` |
-| Tonspuren als WAV (Cache, 3 Tage) | `%LocalAppData%\ClipManager\audio\` |
+| Vorschaubilder, Filmstreifen | `%LocalAppData%\ClipManager\thumbs\` (oder eigener Ordner `CacheFolder`) |
+| Tonspuren als WAV (Cache, 3 Tage seit letzter Nutzung, höchstens `AudioCacheMaxGb`, Standard 5 GB) | `%LocalAppData%\ClipManager\audio\` (oder eigener Ordner `CacheFolder`) |
 | Zwischen-Exporte (2 Tage) | `%TEMP%\ClipManager\Export\` |
 | Fehler-Log | `%LocalAppData%\ClipManager\log.txt` |
 | Exporte (Standard) | `Videos\Clip Manager Exporte` |

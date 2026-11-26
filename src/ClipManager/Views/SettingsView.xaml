@@ -191,6 +191,76 @@
                             </DockPanel>
                         </StackPanel>
                     </Border>
+
+                    <!-- Zwischenspeicher -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource CardTitle}" Text="Zwischenspeicher" />
+                            <TextBlock Style="{StaticResource Hint}" Text="Hier legt Clippy die Tonspuren für den Editor (als WAV, damit du jede Spur einzeln hörst) und die Vorschaubilder ab. Alles darin darf weg, Clippy erstellt es bei Bedarf neu." />
+                            <TextBlock
+                                x:Name="CacheFolderText"
+                                Style="{StaticResource Label}"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                x:Name="CacheSizeText"
+                                Margin="0,4,0,0"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="Belegt: …" />
+                            <WrapPanel Margin="0,12,0,0">
+                                <ui:Button
+                                    x:Name="ChangeCacheButton"
+                                    Margin="0,0,8,8"
+                                    Click="ChangeCacheFolder_Click"
+                                    Content="Ordner ändern …"
+                                    Icon="{ui:SymbolIcon FolderArrowRight24}" />
+                                <ui:Button
+                                    x:Name="ResetCacheButton"
+                                    Margin="0,0,8,8"
+                                    Click="ResetCacheFolder_Click"
+                                    Content="Standard"
+                                    Icon="{ui:SymbolIcon ArrowReset24}" />
+                                <ui:Button
+                                    Margin="0,0,8,8"
+                                    Click="OpenCacheFolder_Click"
+                                    Content="Öffnen"
+                                    Icon="{ui:SymbolIcon FolderOpen24}" />
+                                <ui:Button
+                                    x:Name="ClearCacheButton"
+                                    Margin="0,0,8,8"
+                                    Click="ClearAudioCache_Click"
+                                    Content="Tonspuren leeren"
+                                    Icon="{ui:SymbolIcon Delete24}" />
+                            </WrapPanel>
+                            <DockPanel Margin="0,4,0,0">
+                                <TextBlock
+                                    Width="140"
+                                    VerticalAlignment="Center"
+                                    DockPanel.Dock="Left"
+                                    Style="{StaticResource Label}"
+                                    Text="Tonspuren höchstens" />
+                                <TextBlock
+                                    x:Name="AudioCacheLimitText"
+                                    Width="60"
+                                    Margin="12,0,0,0"
+                                    VerticalAlignment="Center"
+                                    DockPanel.Dock="Right"
+                                    Style="{StaticResource Label}"
+                                    Text="5 GB" />
+                                <Slider
+                                    x:Name="AudioCacheLimitSlider"
+                                    IsMoveToPointEnabled="True"
+                                    IsSnapToTickEnabled="True"
+                                    Maximum="50"
+                                    Minimum="1"
+                                    TickFrequency="1"
+                                    ValueChanged="AudioCacheLimit_Changed" />
+                            </DockPanel>
+                            <TextBlock
+                                Margin="0,6,0,0"
+                                Style="{StaticResource Hint}"
+                                Text="Wird es mehr, löscht Clippy die Tonspuren, die am längsten nicht gebraucht wurden. Nach 3 Tagen ohne Nutzung fliegen sie sowieso raus." />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Export -->

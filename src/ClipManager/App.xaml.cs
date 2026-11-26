@@ -27,6 +27,37 @@ public partial class App : Application
 
     public static AppSettings Settings { get; private set; } = null!;
 
+    /// <summary>Standard-Ort des Zwischenspeichers: %LocalAppData%\ClipManager.</summary>
+    public static string DefaultCacheRoot { get; private set; } = "";
+
+    /// <summary>Aktueller Ort des Zwischenspeichers (Tonspuren in "audio", Bilder in "thumbs").</summary>
+    public static string CacheRoot
+    {
+        get
+        {
+            var custom = Settings.CacheFolder;
+            // Eigener Ordner auf einem Laufwerk, das gerade fehlt (z.B. USB-Platte): Standard nehmen.
+            if (!string.IsNullOrWhiteSpace(custom) && Path.GetPathRoot(custom) is { Length: > 0 } drive && !Directory.Exists(drive))
+            {
+                return DefaultCacheRoot;
+            }
+
+            return Core.Storage.CacheFolder.Resolve(custom, DefaultCacheRoot);
+        }
+    }
+
+    /// <summary>Zwischenspeicher (neu) an <see cref="CacheRoot"/> einrichten, z.B. nach dem Ändern des Ordners.</summary>
+    public static void ApplyCacheRoot()
+    {
+        var root = CacheRoot;
+        Thumbnails = new ThumbnailCache(Path.Combine(root, Core.Storage.CacheFolder.ThumbsFolder), ProcessRunner);
+        Filmstrips = new FilmstripCache(Path.Combine(root, Core.Storage.CacheFolder.ThumbsFolder), ProcessRunner);
+        AudioTracks = new AudioTrackCache(Path.Combine(root, Core.Storage.CacheFolder.AudioFolder), ProcessRunner)
+        {
+            MaxBytes = Settings.AudioCacheMaxBytes(),
+        };
+    }
+
     /// <summary>
     /// Ordner, in dem die ClipManager.exe liegt. Bewusst über den Prozesspfad und nicht über
     /// AppContext.BaseDirectory, das bei Single-File-Programmen auf einen Entpack-Ordner zeigen kann.
@@ -128,9 +159,9 @@ public partial class App : Application
             Db = new LibraryDb(Path.Combine(dataDir, "library.db"));
 
             await Step("Zwischenspeicher vorbereiten …", 25);
-            Thumbnails = new ThumbnailCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
-            Filmstrips = new FilmstripCache(Path.Combine(localDir, "thumbs"), ProcessRunner);
-            AudioTracks = new AudioTrackCache(Path.Combine(localDir, "audio"), ProcessRunner);
+            DefaultCacheRoot = localDir;
+            ApplyCacheRoot();
+            await Task.Run(() => AudioTracks.Cleanup());
             await Task.Run(CleanupExportTemp);
 
             await Step("FFmpeg suchen …", 40);

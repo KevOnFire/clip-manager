@@ -108,6 +108,14 @@ public sealed class AppSettings
     /// <summary>Eigenes Design mit Farbverlauf (standardmäßig aus).</summary>
     public ThemeSettings Theme { get; set; } = new();
 
+    /// <summary>Eigener Ordner für den Zwischenspeicher (Tonspuren, Vorschaubilder). Null = %LocalAppData%\ClipManager.</summary>
+    public string? CacheFolder { get; set; }
+
+    /// <summary>Höchstens so viele GB Tonspuren zwischenspeichern (1–100).</summary>
+    public int AudioCacheMaxGb { get; set; } = 5;
+
+    public long AudioCacheMaxBytes() => Math.Clamp(AudioCacheMaxGb, 1, 100) * 1024L * 1024 * 1024;
+
     /// <summary>Tonspuren im Editor eingeklappt (nur Filmstreifen + kleine An/Aus-Knöpfe). Gilt für alle Clips.</summary>
     public bool TracksCollapsed { get; set; }
 
