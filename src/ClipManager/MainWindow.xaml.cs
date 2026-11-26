@@ -265,6 +265,7 @@ public partial class MainWindow : FluentWindow
         };
         editor.FullscreenRequested += (_, on) => SetFullscreen(on);
         editor.NeighborRequested += (_, dir) => OpenNeighbor(editor, dir);
+        editor.ClipDeleted += (_, path) => OpenAfterDelete(editor, path);
         editor.SetNeighbors(_library.Neighbor(clip.Path, -1) != null, _library.Neighbor(clip.Path, 1) != null);
         _editor = editor;
         PageHost.Content = editor;
@@ -282,6 +283,39 @@ public partial class MainWindow : FluentWindow
         }
 
         var fullscreen = from.IsFullscreen;
+        OpenEditor(next, null);
+        if (fullscreen)
+        {
+            _editor?.SetFullscreen(true);
+        }
+    }
+
+    /// <summary>
+    /// Nach dem Löschen im Editor gleich den nächsten Clip öffnen (wie Pfeil nach rechts),
+    /// beim letzten Clip den davor, und nur wenn keiner mehr da ist zurück zur Bibliothek.
+    /// </summary>
+    private async void OpenAfterDelete(EditorView from, string deletedPath)
+    {
+        if (!ReferenceEquals(_editor, from))
+        {
+            return;
+        }
+
+        var next = _library.Neighbor(deletedPath, 1) ?? _library.Neighbor(deletedPath, -1);
+        var fullscreen = from.IsFullscreen;
+        if (next == null)
+        {
+            await ShowLibrary();
+            return;
+        }
+
+        // Erst die Bibliothek neu einlesen, damit Vor/Zurück im nächsten Clip den gelöschten nicht mehr kennt.
+        await _library.RefreshAsync();
+        if (!ReferenceEquals(_editor, from))
+        {
+            return;
+        }
+
         OpenEditor(next, null);
         if (fullscreen)
         {
