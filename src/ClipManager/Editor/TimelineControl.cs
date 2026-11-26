@@ -92,6 +92,10 @@ public sealed class TimelineControl : FrameworkElement
     private double _dragOverlayStart;
     private double _dragOverlayEnd;
     private TimeSpan _dragDownTime;
+    private double? _snapLine;
+
+    /// <summary>Wie nah (in Bildschirm-Pixeln) ein Balken-Rand kommen muss, damit er einrastet.</summary>
+    private const double SnapPixels = 8;
 
     /// <summary>Auswahl per Rechtsklick-Ziehen auf dem Filmstreifen (statt in einer Spur).</summary>
     private const int StripSelection = -2;
@@ -750,6 +754,8 @@ public sealed class TimelineControl : FrameworkElement
                 }
 
                 _dragOverlay = null;
+                _snapLine = null;
+                InvalidateVisual();
                 break;
 
             case DragMode.Playhead:
@@ -1174,27 +1180,46 @@ public sealed class TimelineControl : FrameworkElement
         var delta = (t - _dragDownTime).TotalSeconds;
         var min = EditTimeline.MinSegment.TotalSeconds * 3;
         double start = _dragOverlayStart, end = _dragOverlayEnd;
+
+        // Einrasten an den Rändern anderer Objekte, Anfang/Ende und Abspielkopf (Alt gedrückt = frei ziehen).
+        var pxPerSecond = X(TimeSpan.FromSeconds(1)) - X(TimeSpan.Zero);
+        var snap = pxPerSecond > 0 && (Keyboard.Modifiers & ModifierKeys.Alt) == 0;
+        var tolerance = snap ? SnapPixels / pxPerSecond : 0;
+        var targets = snap ? OverlaySnap.Targets(tl.Overlays, id, duration, _position.TotalSeconds) : new List<double>();
+        double? line = null;
         switch (_drag)
         {
             case DragMode.OverlayMove:
                 var length = end - start;
                 start = Math.Clamp(start + delta, 0, Math.Max(0, duration - length));
-                end = start + length;
+                (start, end, line) = snap ? OverlaySnap.Move(start, start + length, targets, tolerance, duration) : (start, start + length, null);
                 break;
             case DragMode.OverlayStart:
                 start = Math.Clamp(start + delta, 0, end - min);
+                if (snap)
+                {
+                    (start, line) = OverlaySnap.Edge(start, targets, tolerance, 0, end - min);
+                }
+
                 break;
             default:
                 end = Math.Clamp(end + delta, start + min, duration);
+                if (snap)
+                {
+                    (end, line) = OverlaySnap.Edge(end, targets, tolerance, start + min, duration);
+                }
+
                 break;
         }
+
+        _snapLine = line;
 
         tl.UpdateOverlay(id, o =>
         {
             o.Start = start;
             o.End = end;
         }, recordUndo: false);
-        SeekRequested?.Invoke(this, TimeSpan.FromSeconds(_drag == DragMode.OverlayEnd ? end : start));
+        // Kein Springen: der Abspielkopf bleibt stehen, während der Balken verschoben wird.
     }
 
     private Rect OverlayBarRect(OverlayItem item)
@@ -1306,6 +1331,14 @@ public sealed class TimelineControl : FrameworkElement
         // Was nicht im Export landet, wie oben abdunkeln
         var top = LanesTop;
         var height = rows * ObjectLaneHeight - 4;
+
+        // Hilfslinie, solange ein Balken eingerastet ist
+        if (_snapLine is { } snapAt && _dragOverlay != null)
+        {
+            var sx = Math.Round(X(TimeSpan.FromSeconds(snapAt))) + 0.5;
+            dc.DrawLine(SnapPen, new Point(sx, 6), new Point(sx, top + height));
+        }
+
         if (inX > strip.Left)
         {
             dc.DrawRectangle(OutsideBrush, null, new Rect(strip.Left, top, inX - strip.Left, height));
@@ -1315,6 +1348,15 @@ public sealed class TimelineControl : FrameworkElement
         {
             dc.DrawRectangle(OutsideBrush, null, new Rect(outX, top, strip.Right - outX, height));
         }
+    }
+
+    private static readonly Pen SnapPen = CreateSnapPen();
+
+    private static Pen CreateSnapPen()
+    {
+        var pen = new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x33)), 1.5) { DashStyle = new DashStyle(new double[] { 3, 2 }, 0) };
+        pen.Freeze();
+        return pen;
     }
 
     /// <summary>Kleiner Griff (Balken mit Rillen) an einem ziehbaren Rand.</summary>

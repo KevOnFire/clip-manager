@@ -8,6 +8,7 @@ using System.Windows.Shapes;
 using ClipManager.Core;
 using ClipManager.Core.Editing;
 using ClipManager.Core.Export;
+using ClipManager.Core.Media;
 
 namespace ClipManager.Editor;
 
@@ -19,6 +20,42 @@ namespace ClipManager.Editor;
 internal static class OverlayVisuals
 {
     private static readonly Dictionary<string, BitmapSource?> Images = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, GifAnimation?> Gifs = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Einzelbilder eines GIFs, falls schon zerlegt (sonst null, dann zeigt es nur das erste Bild).</summary>
+    public static GifAnimation? GetGif(string? path)
+    {
+        if (!GifFrames.IsGif(path))
+        {
+            return null;
+        }
+
+        if (!Gifs.TryGetValue(path!, out var gif))
+        {
+            gif = GifFrames.Load(path!);
+            Gifs[path!] = gif;
+        }
+
+        return gif;
+    }
+
+    public static void SetGif(string path, GifAnimation? gif) => Gifs[path] = gif;
+
+    /// <summary>Bild eines GIF-Objekts passend zur Stelle im Video zeigen (läuft mit dem Video, steht bei Pause).</summary>
+    public static void UpdateGifFrame(Grid host, OverlayItem item, TimeSpan position)
+    {
+        if (item.Kind != OverlayKind.Image || GetGif(item.ImagePath) is not { } gif)
+        {
+            return;
+        }
+
+        if (host.Children.Count > 0 && host.Children[0] is Image image
+            && LoadImage(gif.FramePath(gif.FrameAt(position.TotalSeconds - item.Start))) is { } frame
+            && !ReferenceEquals(image.Source, frame))
+        {
+            image.Source = frame;
+        }
+    }
 
     public static Color ParseColor(string hex)
     {
@@ -71,7 +108,8 @@ internal static class OverlayVisuals
     }
 
     /// <summary>Inhalt eines Objekts (ohne Platz und Drehung), füllt die ganze Fläche. Nicht für Unschärfe.</summary>
-    public static FrameworkElement CreateContent(OverlayItem item, double frameWidth, double frameHeight)
+    /// <param name="image">Für Bilder: dieses Bild statt der Datei (Einzelbild eines GIFs beim Export).</param>
+    public static FrameworkElement CreateContent(OverlayItem item, double frameWidth, double frameHeight, BitmapSource? image = null)
     {
         var brush = new SolidColorBrush(ParseColor(item.Color));
         brush.Freeze();
@@ -116,7 +154,9 @@ internal static class OverlayVisuals
                 };
 
             case OverlayKind.Image:
-                if (LoadImage(item.ImagePath) is { } image)
+                image ??= GetGif(item.ImagePath) is { } gif ? LoadImage(gif.FramePath(0)) : null;
+                image ??= LoadImage(item.ImagePath);
+                if (image != null)
                 {
                     return new Image { Source = image, Stretch = Stretch.Fill };
                 }
@@ -265,34 +305,25 @@ internal static class OverlayVisuals
             }
 
             var blur = item.Kind == OverlayKind.Blur;
-            FrameworkElement element = blur ? new Rectangle { Fill = Brushes.White } : CreateContent(item, frameWidth, frameHeight);
-            Place(element, item, frameWidth, frameHeight);
-            Canvas.SetLeft(element, Canvas.GetLeft(element) - bounds.X);
-            Canvas.SetTop(element, Canvas.GetTop(element) - bounds.Y);
+            var name = $"objekt{index++}";
 
-            var canvas = new Canvas
+            // GIF: jedes Einzelbild gedreht/skaliert als eigenes PNG, FFmpeg spielt sie in Schleife ab.
+            if (!blur && item.Kind == OverlayKind.Image && GetGif(item.ImagePath) is { } gif)
             {
-                Width = bounds.Width,
-                Height = bounds.Height,
-                Background = blur ? Brushes.Black : Brushes.Transparent,
-                ClipToBounds = true,
-            };
-            canvas.Children.Add(element);
-            var size = new Size(bounds.Width, bounds.Height);
-            canvas.Measure(size);
-            canvas.Arrange(new Rect(size));
-            canvas.UpdateLayout();
+                for (var f = 0; f < gif.Count; f++)
+                {
+                    var frame = LoadImage(gif.FramePath(f));
+                    Render(CreateContent(item, frameWidth, frameHeight, frame), item, bounds, frameWidth, frameHeight, false,
+                        System.IO.Path.Combine(folder, $"{name}_{f + 1:0000}.png"));
+                }
 
-            var bitmap = new RenderTargetBitmap(bounds.Width, bounds.Height, 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(canvas);
-            var path = System.IO.Path.Combine(folder, $"objekt{index++}.png");
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using (var stream = File.Create(path))
-            {
-                encoder.Save(stream);
+                layers.Add(new OverlayLayer(System.IO.Path.Combine(folder, name + "_%04d.png"), bounds, item.Start, item.End, 0, gif.Fps));
+                continue;
             }
 
+            FrameworkElement element = blur ? new Rectangle { Fill = Brushes.White } : CreateContent(item, frameWidth, frameHeight);
+            var path = System.IO.Path.Combine(folder, name + ".png");
+            Render(element, item, bounds, frameWidth, frameHeight, blur, path);
             layers.Add(new OverlayLayer(
                 path,
                 bounds,
@@ -302,5 +333,33 @@ internal static class OverlayVisuals
         }
 
         return layers;
+    }
+
+    /// <summary>Ein Objekt gedreht und an seinem Platz in ein PNG der Größe <paramref name="bounds"/> zeichnen.</summary>
+    private static void Render(FrameworkElement element, OverlayItem item, PixelRect bounds, int frameWidth, int frameHeight, bool blackBackground, string path)
+    {
+        Place(element, item, frameWidth, frameHeight);
+        Canvas.SetLeft(element, Canvas.GetLeft(element) - bounds.X);
+        Canvas.SetTop(element, Canvas.GetTop(element) - bounds.Y);
+
+        var canvas = new Canvas
+        {
+            Width = bounds.Width,
+            Height = bounds.Height,
+            Background = blackBackground ? Brushes.Black : Brushes.Transparent,
+            ClipToBounds = true,
+        };
+        canvas.Children.Add(element);
+        var size = new Size(bounds.Width, bounds.Height);
+        canvas.Measure(size);
+        canvas.Arrange(new Rect(size));
+        canvas.UpdateLayout();
+
+        var bitmap = new RenderTargetBitmap(bounds.Width, bounds.Height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(canvas);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(path);
+        encoder.Save(stream);
     }
 }

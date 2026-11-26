@@ -7,6 +7,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using ClipManager.Core;
 using ClipManager.Core.Editing;
+using ClipManager.Core.Media;
 
 namespace ClipManager.Editor;
 
@@ -57,6 +58,7 @@ public partial class EditorView
     private double _layerDragStartY;
     private string _audioHint = "";
     private object? _frameKey;
+    private readonly HashSet<string> _gifPending = new(StringComparer.OrdinalIgnoreCase);
 
     private double FrameW => VideoFrame.ActualWidth;
 
@@ -70,14 +72,8 @@ public partial class EditorView
     {
         VideoFrame.SizeChanged += (_, _) => SyncOverlays(rebuild: true);
         TimelineView.StripRangeSelected += (_, e) => ShowStripMenu(e.Start, e.End);
-        TimelineView.OverlayPressed += (_, id) =>
-        {
-            SelectOverlay(id);
-            if (id != null && _timeline?.FindOverlay(id) is { } item && !item.IsVisibleAt(Position))
-            {
-                Seek(item.Range.Start);
-            }
-        };
+        // Balken anklicken/ziehen wählt nur aus, die Stelle im Video bleibt wo sie ist (Wunsch Kev).
+        TimelineView.OverlayPressed += (_, id) => SelectOverlay(id);
         TimelineView.OverlayHovered += (_, id) => SetHoverOverlay(id, fromTimeline: true);
         SetShowObjects(App.Settings.ShowObjectLanes, persist: false);
     }
@@ -178,6 +174,12 @@ public partial class EditorView
             }
 
             host.Item = item;
+            if (item.Kind == OverlayKind.Image && GifFrames.IsGif(item.ImagePath) && OverlayVisuals.GetGif(item.ImagePath) == null
+                && _gifPending.Add(item.ImagePath!))
+            {
+                _ = PrepareGifAsync(item.ImagePath!);
+            }
+
             OverlayVisuals.Place(host.Element, item, fw, fh);
             if (item.Kind == OverlayKind.Blur)
             {
@@ -229,10 +231,45 @@ public partial class EditorView
             {
                 host.Element.Visibility = v;
             }
+
+            if (visible)
+            {
+                OverlayVisuals.UpdateGifFrame(host.Element, host.Item, pos);
+            }
         }
 
         UpdateSelectionFrame();
         UpdateLayerDims(pos);
+    }
+
+    /// <summary>GIF einmal in Einzelbilder zerlegen (im Hintergrund), danach bewegt es sich in der Vorschau.</summary>
+    private async Task PrepareGifAsync(string path)
+    {
+        if (App.LocateFfmpeg() is not { } ffmpeg)
+        {
+            return;
+        }
+
+        try
+        {
+            var gif = await Task.Run(() => GifFrames.ExtractAsync(App.ProcessRunner, ffmpeg, path));
+            if (gif == null)
+            {
+                return; // Nur ein Bild oder kaputt: bleibt ein normales Bild.
+            }
+
+            OverlayVisuals.SetGif(path, gif);
+            foreach (var host in _overlayHosts.Values.Where(h => string.Equals(h.Item.ImagePath, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                host.ContentKey = "";
+            }
+
+            SyncOverlays();
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"GIF \"{path}\" konnte nicht zerlegt werden", ex);
+        }
     }
 
     // ---------- Auswahl ----------
@@ -947,6 +984,30 @@ public partial class EditorView
                 };
                 var value = c;
                 swatch.Click += (_, _) => SetColor(value);
+                if (!Palette.Contains(c, StringComparer.OrdinalIgnoreCase))
+                {
+                    // Eigene Farbe: Rechtsklick → entfernen
+                    swatch.ToolTip = $"{c} · Rechtsklick zum Entfernen";
+                    var remove = new MenuItem { Header = "Farbe entfernen" };
+                    remove.Click += (_, _) =>
+                    {
+                        if (App.Settings.ForgetColor(value))
+                        {
+                            try
+                            {
+                                App.SaveSettings();
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Error("Einstellungen konnten nicht gespeichert werden", ex);
+                            }
+                        }
+
+                        BuildOverlayProps();
+                    };
+                    swatch.ContextMenu = new ContextMenu { Items = { remove } };
+                }
+
                 OverlayPropsPanel.Children.Add(swatch);
             }
 

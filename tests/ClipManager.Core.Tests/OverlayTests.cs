@@ -320,3 +320,17 @@ public class OverlayExtraTests
         Assert.Equal(new[] { "#222222", "#777777", "#666666", "#555555", "#444444", "#333333" }, s.CustomColors);
     }
 }
+
+public class CustomColorRemoveTests
+{
+    [Fact]
+    public void ForgetColor_RemovesIgnoringCase()
+    {
+        var s = new ClipManager.Core.Settings.AppSettings();
+        s.RememberColor("#aabbcc");
+        s.RememberColor("#112233");
+        Assert.True(s.ForgetColor("#AABBCC"));
+        Assert.Equal(new[] { "#112233" }, s.CustomColors);
+        Assert.False(s.ForgetColor("#AABBCC"));
+    }
+}
