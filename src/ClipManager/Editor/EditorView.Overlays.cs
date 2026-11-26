@@ -74,6 +74,7 @@ public partial class EditorView
         TimelineView.StripRangeSelected += (_, e) => ShowStripMenu(e.Start, e.End);
         // Balken anklicken/ziehen wählt nur aus, die Stelle im Video bleibt wo sie ist (Wunsch Kev).
         TimelineView.OverlayPressed += (_, id) => SelectOverlay(id);
+        TimelineView.OverlayMenuRequested += (_, id) => ShowOverlayMenu(id);
         TimelineView.OverlayHovered += (_, id) => SetHoverOverlay(id, fromTimeline: true);
         SetShowObjects(App.Settings.ShowObjectLanes, persist: false);
     }
@@ -166,6 +167,14 @@ public partial class EditorView
                     Background = item.Kind == OverlayKind.Pen ? null : Brushes.Transparent,
                 };
                 element.MouseLeftButtonDown += OverlayElement_MouseLeftButtonDown;
+                element.MouseRightButtonUp += (_, e) =>
+                {
+                    if (!_penMode)
+                    {
+                        e.Handled = true;
+                        ShowOverlayMenu(item.Id);
+                    }
+                };
                 element.MouseEnter += (_, _) => SetHoverOverlay(item.Id, fromTimeline: false);
                 element.MouseLeave += (_, _) => SetHoverOverlay(null, fromTimeline: false);
                 host = new OverlayHost { Element = element, Item = item };
@@ -1493,6 +1502,70 @@ public partial class EditorView
         }
 
         BuildLayerList();
+    }
+
+    // ---------- Rechtsklick auf ein Objekt ----------
+
+    /// <summary>Menü für ein Objekt (Rechtsklick auf den Balken oder das Objekt im Video).</summary>
+    private void ShowOverlayMenu(string id)
+    {
+        if (_timeline?.FindOverlay(id) is not { } item)
+        {
+            return;
+        }
+
+        SelectOverlay(id);
+        var index = _timeline.Overlays.ToList().FindIndex(o => o.Id == id);
+        var items = new List<(string, Wpf.Ui.Controls.SymbolRegular, Action)>
+        {
+            ($"„{item.Label}“ löschen", Wpf.Ui.Controls.SymbolRegular.Delete24, () =>
+            {
+                _timeline?.RemoveOverlay(id);
+                SelectOverlay(null);
+            }),
+            ("Doppeln", Wpf.Ui.Controls.SymbolRegular.Copy24, () => DuplicateOverlay(id)),
+        };
+        if (index < _timeline.Overlays.Count - 1)
+        {
+            items.Add(("Nach vorne", Wpf.Ui.Controls.SymbolRegular.ArrowUp24, () =>
+            {
+                _timeline?.MoveOverlayLayer(id, +1);
+                BuildOverlayProps();
+            }));
+        }
+
+        if (index > 0)
+        {
+            items.Add(("Nach hinten", Wpf.Ui.Controls.SymbolRegular.ArrowDown24, () =>
+            {
+                _timeline?.MoveOverlayLayer(id, -1);
+                BuildOverlayProps();
+            }));
+        }
+
+        items.Add(("Zum Anfang springen", Wpf.Ui.Controls.SymbolRegular.Previous24, () => Seek(TimeSpan.FromSeconds(item.Start))));
+        ShowMenu(items.ToArray());
+    }
+
+    /// <summary>Kopie des Objekts, etwas versetzt, ganz vorne.</summary>
+    private void DuplicateOverlay(string id)
+    {
+        if (_timeline?.FindOverlay(id) is not { } item)
+        {
+            return;
+        }
+
+        var copy = item.Clone();
+        copy.Id = Guid.NewGuid().ToString("N");
+        copy.X = Math.Min(copy.X + 0.03, Math.Max(0, 1 - copy.W));
+        copy.Y = Math.Min(copy.Y + 0.03, Math.Max(0, 1 - copy.H));
+        if (copy.Paths != null)
+        {
+            copy.Paths = copy.Paths.Select(p => p.Select(pt => pt.Length >= 2 ? new[] { pt[0] + 0.03, pt[1] + 0.03 } : pt).ToList()).ToList();
+        }
+
+        var added = _timeline.AddOverlay(copy);
+        SelectOverlay(added.Id);
     }
 
     // ---------- Bereich auf der Hauptleiste (Rechtsklick-Ziehen) ----------

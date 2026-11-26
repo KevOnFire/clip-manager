@@ -153,12 +153,25 @@ public partial class LibraryView : UserControl
             _ => ClipSort.Newest,
         });
 
+    private string? _focusPath;
+
+    /// <summary>
+    /// Beim Zurückkommen aus dem Editor: die Seite mit diesem Clip zeigen und ihn kurz aufleuchten lassen.
+    /// Greift beim nächsten Anzeigen der Seite (RefreshAsync danach).
+    /// </summary>
+    public void FocusClip(string path) => _focusPath = path;
+
     private void ApplyFilter(bool resetPage)
     {
         _filtered = LibraryQuery.Apply(_allClips, CurrentFilter(), _favorites, _durations, _edited, _names);
         if (resetPage)
         {
             _page = 0;
+        }
+
+        if (_focusPath != null && LibraryQuery.PageOf(_filtered, _focusPath, PageSize) is { } focusPage)
+        {
+            _page = focusPage;
         }
 
         _page = Math.Clamp(_page, 0, LibraryQuery.PageCount(_filtered.Count, PageSize) - 1);
@@ -217,10 +230,28 @@ public partial class LibraryView : UserControl
             })
             .ToList();
 
+        // Clip, aus dem man zurückkommt, kurz aufleuchten lassen und ins Bild holen
+        var focus = _focusPath == null ? null : tiles.FirstOrDefault(t => string.Equals(t.Clip.Path, _focusPath, StringComparison.OrdinalIgnoreCase));
+        _focusPath = null;
+        if (focus != null)
+        {
+            focus.IsFlashing = true;
+        }
+
         TileList.ItemsSource = tiles;
         EmptyState.Visibility = Visibility.Collapsed;
         TileScroller.Visibility = Visibility.Visible;
         TileScroller.ScrollToTop();
+        if (focus != null)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (TileList.ItemContainerGenerator.ContainerFromItem(focus) is FrameworkElement container)
+                {
+                    container.BringIntoView();
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
 
         var pages = LibraryQuery.PageCount(_filtered.Count, PageSize);
         Pager.Visibility = pages > 1 ? Visibility.Visible : Visibility.Collapsed;

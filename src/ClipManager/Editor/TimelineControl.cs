@@ -132,6 +132,9 @@ public sealed class TimelineControl : FrameworkElement
     /// <summary>Maus über einem Objekt-Balken (Id) oder nicht mehr (null).</summary>
     public event EventHandler<string?>? OverlayHovered;
 
+    /// <summary>Rechtsklick auf einen Objekt-Balken (Menü mit Löschen usw.).</summary>
+    public event EventHandler<string>? OverlayMenuRequested;
+
     /// <summary>Unter dem Filmstreifen die Objekt-Reihen statt der Tonspuren zeigen.</summary>
     public bool ShowObjects
     {
@@ -648,6 +651,13 @@ public sealed class TimelineControl : FrameworkElement
         var point = e.GetPosition(this);
         if (_timeline == null || _drag != DragMode.None || (point.Y >= LanesTop && !_showObjects))
         {
+            return;
+        }
+
+        if (_showObjects && point.Y >= LanesTop && OverlayBarAt(point) is { } bar)
+        {
+            OverlayMenuRequested?.Invoke(this, bar.Id);
+            e.Handled = true;
             return;
         }
 

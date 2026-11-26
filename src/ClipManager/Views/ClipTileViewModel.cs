@@ -116,6 +116,22 @@ public sealed class ClipTileViewModel : INotifyPropertyChanged
         }
     }
 
+    private bool _isFlashing;
+
+    /// <summary>Clip, aus dem man gerade aus dem Editor zurückkommt: leuchtet kurz auf.</summary>
+    public bool IsFlashing
+    {
+        get => _isFlashing;
+        set
+        {
+            if (_isFlashing != value)
+            {
+                _isFlashing = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     private bool _isSelected;
     private bool _selectionMode;
 
