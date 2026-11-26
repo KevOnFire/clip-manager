@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using ClipManager.Core;
 using ClipManager.Core.Media;
 using ClipManager.Core.Settings;
 using ClipManager.Core.Updates;
@@ -52,6 +53,9 @@ public partial class SettingsView : UserControl
             FolderList.ItemsSource = s.ClipFolders.ToList();
             SubfoldersSwitch.IsChecked = s.ScanSubfolders;
             VideoColorsSwitch.IsChecked = s.CorrectVideoColors;
+            AudioCacheLimitSlider.Value = Math.Clamp(s.AudioCacheMaxGb, 1, 50);
+            AudioCacheLimitText.Text = $"{AudioCacheLimitSlider.Value:0} GB";
+            ShowCacheFolder();
             DiskWarningSwitch.IsChecked = s.DiskWarningEnabled;
             DiskWarningSlider.Value = Math.Clamp(s.DiskWarningPercent, 50, 99);
             ShowDiskWarning();
@@ -178,6 +182,122 @@ public partial class SettingsView : UserControl
 
         App.Settings.CorrectVideoColors = VideoColorsSwitch.IsChecked == true;
         App.SaveSettings();
+    }
+
+    // ---------- Zwischenspeicher ----------
+
+    private async void ShowCacheFolder()
+    {
+        var root = App.CacheRoot;
+        CacheFolderText.Text = string.IsNullOrWhiteSpace(App.Settings.CacheFolder) ? $"{root} (Standard)" : root;
+        ResetCacheButton.IsEnabled = !string.IsNullOrWhiteSpace(App.Settings.CacheFolder);
+        CacheSizeText.Text = "Belegt: wird berechnet …";
+        var (audio, thumbs) = await Task.Run(() => (
+            Core.Storage.CacheFolder.Size(Path.Combine(root, Core.Storage.CacheFolder.AudioFolder)),
+            Core.Storage.CacheFolder.Size(Path.Combine(root, Core.Storage.CacheFolder.ThumbsFolder))));
+        CacheSizeText.Text = $"Belegt: {Core.Storage.DiskUsage.FormatBytes(audio + thumbs)} " +
+            $"(Tonspuren {Core.Storage.DiskUsage.FormatBytes(audio)}, Bilder {Core.Storage.DiskUsage.FormatBytes(thumbs)})";
+    }
+
+    private async void ChangeCacheFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog { Title = "Ordner für den Zwischenspeicher auswählen" };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        await MoveCacheAsync(Core.Storage.CacheFolder.FromPicked(dialog.FolderName));
+    }
+
+    private async void ResetCacheFolder_Click(object sender, RoutedEventArgs e) => await MoveCacheAsync(null);
+
+    /// <summary>Zwischenspeicher umziehen: Dateien mitnehmen, danach Clippy auf den neuen Ort umstellen.</summary>
+    private async Task MoveCacheAsync(string? newCustom)
+    {
+        var oldRoot = App.CacheRoot;
+        var newRoot = Core.Storage.CacheFolder.Resolve(newCustom, App.DefaultCacheRoot);
+        ChangeCacheButton.IsEnabled = ResetCacheButton.IsEnabled = ClearCacheButton.IsEnabled = false;
+        CacheSizeText.Text = "Verschiebe Dateien …";
+        try
+        {
+            var (moved, skipped) = await Task.Run(() =>
+            {
+                Directory.CreateDirectory(newRoot);
+                return Core.Storage.CacheFolder.Move(oldRoot, newRoot);
+            });
+            App.Settings.CacheFolder = newCustom;
+            App.SaveSettings();
+            App.ApplyCacheRoot();
+            Log.Info($"Zwischenspeicher von \"{oldRoot}\" nach \"{newRoot}\" umgezogen ({moved} Dateien, {skipped} übersprungen)");
+            if (skipped > 0)
+            {
+                await Dialogs.ErrorAsync($"{skipped} Dateien waren gerade in Benutzung und sind noch im alten Ordner. Die kannst du dort einfach löschen:\n{oldRoot}");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            Log.Error("Zwischenspeicher konnte nicht umziehen", ex);
+            await Dialogs.ErrorAsync($"Der Ordner kann nicht benutzt werden:\n{ex.Message}");
+        }
+        finally
+        {
+            ChangeCacheButton.IsEnabled = ClearCacheButton.IsEnabled = true;
+            ShowCacheFolder();
+        }
+    }
+
+    private void OpenCacheFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var folder = App.CacheRoot;
+        Directory.CreateDirectory(folder);
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+    }
+
+    private async void ClearAudioCache_Click(object sender, RoutedEventArgs e)
+    {
+        ClearCacheButton.IsEnabled = false;
+        var dir = Path.Combine(App.CacheRoot, Core.Storage.CacheFolder.AudioFolder);
+        await Task.Run(() => Core.Storage.CacheFolder.Clear(dir));
+        ClearCacheButton.IsEnabled = true;
+        ShowCacheFolder();
+    }
+
+    private void AudioCacheLimit_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (AudioCacheLimitText == null)
+        {
+            return;
+        }
+
+        AudioCacheLimitText.Text = $"{AudioCacheLimitSlider.Value:0} GB";
+        if (_loading || !IsLoaded)
+        {
+            return;
+        }
+
+        App.Settings.AudioCacheMaxGb = (int)Math.Round(AudioCacheLimitSlider.Value);
+        App.SaveSettings();
+        App.AudioTracks.MaxBytes = App.Settings.AudioCacheMaxBytes();
+        _cacheTrim?.Stop();
+        _cacheTrim ??= CreateCacheTrimTimer();
+        _cacheTrim.Start();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _cacheTrim;
+
+    /// <summary>Nach dem Ziehen am Regler (kurz gewartet) gleich aufräumen.</summary>
+    private System.Windows.Threading.DispatcherTimer CreateCacheTrimTimer()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        timer.Tick += async (_, _) =>
+        {
+            timer.Stop();
+            var cache = App.AudioTracks;
+            await Task.Run(cache.Cleanup);
+            ShowCacheFolder();
+        };
+        return timer;
     }
 
     private void DiskWarningSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e) => DiskWarning_Changed(sender, e);

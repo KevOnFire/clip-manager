@@ -17,6 +17,11 @@ public sealed class AudioTrackCache
     private readonly string _cacheDirectory;
     private readonly IProcessRunner _runner;
 
+    /// <summary>Höchstens so viel Platz belegen (0 = keine Grenze). Darüber fliegen die am längsten nicht benutzten Spuren raus.</summary>
+    public long MaxBytes { get; set; }
+
+    public string Directory => _cacheDirectory;
+
     public AudioTrackCache(string cacheDirectory, IProcessRunner runner)
     {
         _cacheDirectory = cacheDirectory;
@@ -58,6 +63,18 @@ public sealed class AudioTrackCache
         var targets = Enumerable.Range(0, trackCount).Select(i => PathFor(clip, i)).ToList();
         if (targets.All(File.Exists))
         {
+            // Zugriff merken, damit beim Aufräumen zuerst lange nicht benutzte Spuren gehen.
+            foreach (var target in targets)
+            {
+                try
+                {
+                    File.SetLastWriteTimeUtc(target, DateTime.UtcNow);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+
             return Task.FromResult<IReadOnlyList<string>?>(targets);
         }
 
@@ -91,7 +108,7 @@ public sealed class AudioTrackCache
         await Task.Yield();
         try
         {
-            Directory.CreateDirectory(_cacheDirectory);
+            System.IO.Directory.CreateDirectory(_cacheDirectory);
             CleanupOld();
             var partials = targets.Select(t => t[..^4] + ".part.wav").ToList();
             var result = await _runner.RunAsync(ffmpegPath, BuildArguments(clip.Path, partials), TimeSpan.FromMinutes(5), ct).ConfigureAwait(false);
@@ -111,6 +128,9 @@ public sealed class AudioTrackCache
                 File.Move(partials[i], targets[i], overwrite: true);
             }
 
+            // Grenze einhalten (die eben erzeugten Dateien sind die neuesten und bleiben).
+            Cleanup();
+
             return targets;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or InvalidOperationException)
@@ -120,9 +140,21 @@ public sealed class AudioTrackCache
         }
     }
 
+    /// <summary>Alte Spuren (älter als <see cref="KeepFor"/>) löschen und die Größen-Grenze einhalten.</summary>
+    public void Cleanup()
+    {
+        if (!System.IO.Directory.Exists(_cacheDirectory))
+        {
+            return;
+        }
+
+        CleanupOld();
+        Storage.CacheFolder.TrimToSize(_cacheDirectory, MaxBytes);
+    }
+
     private void CleanupOld()
     {
-        foreach (var file in Directory.EnumerateFiles(_cacheDirectory, "*.wav"))
+        foreach (var file in System.IO.Directory.EnumerateFiles(_cacheDirectory, "*.wav"))
         {
             try
             {
