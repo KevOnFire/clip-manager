@@ -149,20 +149,28 @@ public partial class EditorView : System.Windows.Controls.UserControl
         // Höhe der Zeitleiste: eingeklappt nur Filmstreifen + Zeitachse.
         var stripOnly = TimelineControl.LanesTop - 4;
         var current = TimelineHost.ActualHeight > 0 ? TimelineHost.ActualHeight : (collapsed ? TimelineView.Height : stripOnly);
+        // Die Spur-Köpfe links müssen genauso flach werden, sonst bleibt die Zeile so hoch wie vorher
+        // und das Video bekommt keinen Platz dazu.
+        var headerCurrent = TrackHeaderPanel.ActualHeight > 0 ? TrackHeaderPanel.ActualHeight : current;
         if (collapsed)
         {
             Animate(TimelineHost, MaxHeightProperty, stripOnly, current);
+            Animate(TrackHeaderPanel, MaxHeightProperty, stripOnly, headerCurrent);
         }
         else
         {
             var full = double.IsNaN(TimelineView.Height) ? current : TimelineView.Height;
+            Animate(TrackHeaderPanel, MaxHeightProperty, full, headerCurrent);
             Animate(TimelineHost, MaxHeightProperty, full, current, () =>
             {
                 if (!_tracksCollapsed)
                 {
                     // Animation lösen, damit später nachgeladene Spuren wieder Platz bekommen.
-                    TimelineHost.BeginAnimation(MaxHeightProperty, null);
-                    TimelineHost.MaxHeight = double.PositiveInfinity;
+                    foreach (var element in new FrameworkElement[] { TimelineHost, TrackHeaderPanel })
+                    {
+                        element.BeginAnimation(MaxHeightProperty, null);
+                        element.MaxHeight = double.PositiveInfinity;
+                    }
                 }
             });
         }
