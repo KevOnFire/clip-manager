@@ -100,11 +100,17 @@ public sealed class TimelineControl : FrameworkElement
     /// <summary>Auswahl per Rechtsklick-Ziehen auf dem Filmstreifen (statt in einer Spur).</summary>
     private const int StripSelection = -2;
 
+    // Ebenen: zwischengespeichertes Bild von allem außer dem Abspielkopf, darüber der Abspielkopf.
+    private readonly DrawingVisual _content = new() { CacheMode = new BitmapCache { SnapsToDevicePixels = true } };
+    private readonly DrawingVisual _playhead = new();
+
     public TimelineControl()
     {
         Height = LanesTop;
         Focusable = false;
         ClipToBounds = true;
+        AddVisualChild(_content);
+        AddVisualChild(_playhead);
     }
 
     private enum DragMode
@@ -287,12 +293,65 @@ public sealed class TimelineControl : FrameworkElement
             if (_position != value)
             {
                 _position = value;
-                InvalidateVisual();
+                RenderPlayhead();
             }
         }
     }
 
+    /// <summary>
+    /// Zeichnen in zwei Ebenen: Alles außer dem Abspielkopf (Filmstreifen, Wellenformen, Balken) liegt in
+    /// <see cref="_content"/> und wird als Bild zwischengespeichert. Beim Abspielen ändert sich nur der
+    /// Abspielkopf (<see cref="_playhead"/>, ein paar Linien). Früher wurde 40-mal pro Sekunde alles neu
+    /// gezeichnet, bei sehr breiten Fenstern (Ultrawide, maximiert) mit allen Wellenformen ruckelte dann das Video.
+    /// </summary>
     protected override void OnRender(DrawingContext dc)
+    {
+        // Durchsichtige Fläche, damit Mausklicks überall ankommen
+        dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, ActualWidth, ActualHeight));
+        using (var content = _content.RenderOpen())
+        {
+            RenderContent(content);
+        }
+
+        RenderPlayhead();
+    }
+
+    protected override int VisualChildrenCount => 2;
+
+    protected override Visual GetVisualChild(int index) => index == 0 ? _content : _playhead;
+
+    /// <summary>Nur den Abspielkopf neu zeichnen (läuft bei jedem Timer-Tick).</summary>
+    private void RenderPlayhead()
+    {
+        using var dc = _playhead.RenderOpen();
+        if (_timeline is not { } tl || tl.Duration <= TimeSpan.Zero || ActualWidth <= 0)
+        {
+            return;
+        }
+
+        // Abspielkopf: nur innerhalb des Filmstreifens, nicht darüber
+        var px = X(_position);
+        var lanesHeight = LanesHeight;
+        var playheadBottom = lanesHeight > 0 ? LanesTop + lanesHeight - 4 : StripTop + StripHeight;
+        dc.DrawLine(PlayheadPen, new Point(px, StripTop), new Point(px, StripTop + StripHeight));
+        if (lanesHeight > 0)
+        {
+            dc.DrawLine(PlayheadPen, new Point(px, LanesTop), new Point(px, playheadBottom));
+        }
+
+        var head = new StreamGeometry();
+        using (var g = head.Open())
+        {
+            g.BeginFigure(new Point(px - 6, StripTop), true, true);
+            g.LineTo(new Point(px + 6, StripTop), true, false);
+            g.LineTo(new Point(px, StripTop + 8), true, false);
+        }
+
+        head.Freeze();
+        dc.DrawGeometry(PlayheadBrush, null, head);
+    }
+
+    private void RenderContent(DrawingContext dc)
     {
         var width = ActualWidth;
         var strip = new Rect(Pad, StripTop, Math.Max(0, width - 2 * Pad), StripHeight);
@@ -394,26 +453,6 @@ public sealed class TimelineControl : FrameworkElement
             // Oben im Filmstreifen andeuten, was das im Bild wäre
             dc.DrawRectangle(SelectionBrush, null, new Rect(a, StripTop, Math.Max(1, b - a), StripHeight));
         }
-
-        // Abspielkopf: nur innerhalb des Filmstreifens, nicht darüber
-        var px = X(_position);
-        var lanesHeight = LanesHeight;
-        var playheadBottom = lanesHeight > 0 ? LanesTop + lanesHeight - 4 : StripTop + StripHeight;
-        dc.DrawLine(PlayheadPen, new Point(px, StripTop), new Point(px, StripTop + StripHeight));
-        if (lanesHeight > 0)
-        {
-            dc.DrawLine(PlayheadPen, new Point(px, LanesTop), new Point(px, playheadBottom));
-        }
-        var head = new StreamGeometry();
-        using (var g = head.Open())
-        {
-            g.BeginFigure(new Point(px - 6, StripTop), true, true);
-            g.LineTo(new Point(px + 6, StripTop), true, false);
-            g.LineTo(new Point(px, StripTop + 8), true, false);
-        }
-
-        head.Freeze();
-        dc.DrawGeometry(PlayheadBrush, null, head);
     }
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)

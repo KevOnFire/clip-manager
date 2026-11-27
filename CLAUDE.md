@@ -72,6 +72,8 @@ src/ClipManager/          WPF-Oberfläche (net8.0-windows)
                           Spuren einklappbar (`TracksCollapsed` in settings.json): nur Filmstreifen + rechts An/Aus-Knöpfe pro Spur, mit Animation,
                           unten „Speichern unter …“ und „Original überschreiben“ (Schnellspeichern) mit Text statt nur Icons
   Editor/TimelineControl  Selbst gezeichnete Zeitleiste (Filmstreifen, Griffe, Schnitte, Abspielkopf, Spur-Zeilen).
+                          Zwei Ebenen: alles außer Abspielkopf als zwischengespeichertes Bild (`BitmapCache`), Abspielkopf extra –
+                          Position ändern zeichnet nur den Abspielkopf (sonst ruckelte das Video bei Ultrawide/maximiert)
                           Bedienung: in Spur ziehen = Auswahl → Menü (stumm / Lautstärke ändern / rausschneiden), Ränder von stummen und
                           rausgeschnittenen Stellen ziehbar, Klick auf so eine Stelle = Menü (wieder laut / reinnehmen)
   Editor/ExportWindow     Export-/Speichern-Dialog (auch "Schnellspeichern": exportiert volle Qualität und ersetzt das Original ohne Nachfrage): Ziel (Discord-Stufe / volle Qualität), Fortschritt, Rausziehen, Kopieren, Original ersetzen / Kopie / Speichern unter
